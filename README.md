@@ -291,9 +291,9 @@ Clippy enables `all`, `pedantic`, and `nursery`, with all warnings treated as er
 - `just mutate --file src/rules.rs`: focus on one file.
 - Results: `mutants.out/outcomes.json` and per-mutation logs.
 - Gate: missed mutations or timeouts fail the command. Unbuildable mutations are reported separately.
-- Limits: two workers, 300 seconds per build, and a test timeout of five times baseline duration with a 20-second minimum.
+- Limits: 300 seconds per build and a test timeout of five times baseline duration with a 20-second minimum.
 
-To use four mutation workers, run `env CARGO_MUTANTS_JOBS=4 just full`. More workers use more CPU, memory, and temporary disk space; measure before increasing further. The default remains two.
+Mutation workers are selected automatically: one per four available logical CPUs, rounded up. For example, 8 CPUs use 2 workers and 20 CPUs use 5. Cargo also parallelizes compilation within each worker. Override with `env CARGO_MUTANTS_JOBS=4 just full`; more workers use more memory and temporary disk space. CPU count is a starting heuristic, not a guarantee of the fastest setting.
 
 Configure features, file/function filters, and test timeout settings in `.cargo/mutants.toml`. Mutation runs cap compiler lint severity so generated warnings do not prevent testing; normal builds and Clippy still deny warnings.
 
