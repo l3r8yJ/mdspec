@@ -22,13 +22,14 @@ fn main() -> ExitCode {
     let Cli {
         command:
             Command::Check {
-                path,
+                inputs,
+                exclude,
                 strict,
                 format,
                 config,
             },
     } = Cli::parse();
-    let report = check(&path, config.as_deref(), strict);
+    let report = check(&inputs, &exclude, config.as_deref(), strict);
     match reporter::print(&report, format) {
         Ok(()) => ExitCode::from(report.exit_code()),
         Err(error) if error.kind() == io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
@@ -39,12 +40,17 @@ fn main() -> ExitCode {
     }
 }
 
-fn check(path: &Path, config_path: Option<&Path>, strict: bool) -> Report {
+fn check(
+    inputs: &[std::path::PathBuf],
+    exclude: &[String],
+    config_path: Option<&Path>,
+    strict: bool,
+) -> Report {
     let config = match load_config(config_path) {
         Ok(config) => config,
         Err(error) => return Report::new(0, vec![*error]),
     };
-    let (files, mut diagnostics) = workspace::discover(path);
+    let (files, mut diagnostics) = workspace::discover(inputs, exclude);
     let mut files_checked = 0;
     for file in files {
         match fs::read_to_string(&file) {

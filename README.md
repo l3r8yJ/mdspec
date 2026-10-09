@@ -25,7 +25,17 @@ mdspec --help
 mdspec --version
 ```
 
-Accepts one file or directory. Recursively discovers `.md` files, case-insensitively; respects hidden files, `.ignore`, `.gitignore`, and global Git ignores through `ignore`, including outside Git repositories. Directory traversal does not follow symlinks. Every discovered Markdown file is validated as an endpoint document. Referenced files outside the input are read for anchors, without validating their endpoint structure.
+Accepts multiple files, directories, or quoted glob patterns:
+
+```sh
+mdspec check docs/a.md docs/b.md
+mdspec check 'docs/*/service/*.md'
+mdspec check 'docs/**/*.md' shared/ --exclude 'docs/**/generated/**' --exclude docs/archive
+```
+
+`*` matches within one path segment; `**` spans directories. Includes and exclusions resolve from the current directory. Existing literal paths take precedence over glob syntax. Exclusions are repeatable, always win, and exclude a matching directory's subtree. Overlapping inputs are checked once. Invalid patterns, missing inputs, unmatched includes, or an empty final selection return exit code 2; unmatched exclusions are harmless. Parent traversal (`..`) must precede any wildcard.
+
+Directory and glob discovery select `.md` files case-insensitively and respect hidden files, `.ignore`, `.gitignore`, and global Git ignores, including outside Git repositories. Explicit files bypass these discovery filters, but still honor exclusions. Directory traversal does not follow symlinks. A glob must match files, not just their directory; use `/**` to select descendants. Excluded trees are traversed to distinguish unmatched inputs from deliberately excluded files. Every selected Markdown file is validated as an endpoint document. Referenced files outside the selection are still read for anchors without validating their endpoint structure.
 
 ## Documents in any language
 

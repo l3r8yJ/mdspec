@@ -15,11 +15,17 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     #[command(
-        about = "Check a Markdown file or directory (exit: 0 clean, 1 violations, 2 operational error)"
+        about = "Check Markdown files, directories, or glob patterns (exit: 0 clean, 1 violations, 2 operational error)"
     )]
     Check {
-        #[arg(value_name = "PATH")]
-        path: PathBuf,
+        #[arg(value_name = "INPUT", required = true, num_args = 1..)]
+        inputs: Vec<PathBuf>,
+        #[arg(
+            long,
+            value_name = "GLOB",
+            help = "Exclude matching files and directory subtrees; repeatable"
+        )]
+        exclude: Vec<String>,
         #[arg(long, help = "Report unused definitions and treat warnings as errors")]
         strict: bool,
         #[arg(long, value_enum, default_value = "text")]
