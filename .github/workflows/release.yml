@@ -52,9 +52,39 @@ jobs:
           gh run watch "$run_id" --exit-status --interval 10
           echo "run-id=$run_id" >> "$GITHUB_OUTPUT"
 
+  crates-io:
+    name: Publish to crates.io
+    needs: verified-ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Require crates.io credentials
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          if [[ -z "$CARGO_REGISTRY_TOKEN" ]]; then
+            echo 'Add the CRATES_IO_TOKEN repository secret before releasing.' >&2
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: rustup show active-toolchain
+      - name: Install just
+        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad
+        with:
+          tool: just@1.58.0
+      - name: Publish the source verified by CI
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: just publish
+
   publish:
     name: Publish verified artifact
-    needs: verified-ci
+    needs: [verified-ci, crates-io]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

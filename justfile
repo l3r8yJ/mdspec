@@ -29,6 +29,12 @@ coverage: test-coverage coverage-check
 build:
     cargo build --locked --release
 
+publish-check:
+    cargo publish --locked --dry-run
+
+publish:
+    cargo publish --locked --no-verify
+
 smoke: build
     ./target/release/mdspec check tests/fixtures/languages/english.md --config tests/fixtures/languages/english.toml --strict
 
@@ -51,4 +57,4 @@ verify-tag:
         exit 1
     fi
 
-ci: fmt-check clippy coverage package
+ci: fmt-check clippy coverage package publish-check

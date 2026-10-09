@@ -5,6 +5,24 @@ edition = "2024"
 rust-version = "1.96"
 description = "Validate structured Markdown endpoint documentation"
 license = "MIT"
+repository = "https://github.com/l3r8yJ/mdspec"
+readme = "README.md"
+keywords = ["markdown", "validation", "documentation", "cli", "api"]
+categories = ["command-line-utilities", "development-tools"]
+include = [
+    "/src/**",
+    "/tests/**",
+    "/docs/architecture.md",
+    "/docs/rules.md",
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/README.md",
+    "/LICENSE",
+    "/mdspec.toml",
+    "/clippy.toml",
+    "/rust-toolchain.toml",
+    "/justfile",
+]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }

@@ -6,6 +6,15 @@ A CLI validator for structured Markdown endpoint documentation. Checks document 
 
 Requires stable Rust 1.96.0, pinned in `rust-toolchain.toml`.
 
+Published versions can be installed from crates.io:
+
+```sh
+cargo install mdspec --locked
+mdspec --version
+```
+
+Cargo downloads the source package and compiles the executable for the user's system. GitHub Releases separately provides prebuilt Linux binaries. Before the first crates.io publication, or to build from a checkout:
+
 ```sh
 cargo build --release
 cargo install --path . --locked
@@ -148,12 +157,13 @@ just test
 just coverage
 just build
 just package
+just publish-check
 just ci
 ```
 
 Tests drive real CLI processes and fixtures, covering valid and invalid documents, multiple simultaneous violations, Unicode, code blocks, cross-file references, custom English/Japanese labels, strict/config behavior, invalid UTF-8, output formats, exit codes, and directory traversal.
 
-`just coverage` runs the tests once with LLVM instrumentation, then fails if total line coverage is below **70%**. Integration-test sources and dependencies are excluded by cargo-llvm-cov's default filters. CLI subprocesses contribute coverage. `target/coverage/lcov.info` contains the report. `just ci` runs formatting, strict linting, tests with coverage, and packaging; it does not also run the standalone `just test` recipe.
+`just coverage` runs the tests once with LLVM instrumentation, then fails if total line coverage is below **70%**. Integration-test sources and dependencies are excluded by cargo-llvm-cov's default filters. CLI subprocesses contribute coverage. `target/coverage/lcov.info` contains the report. `just ci` runs formatting, strict linting, tests with coverage, binary packaging, and a crates.io publication dry run; it does not also run the standalone `just test` recipe. `just publish-check` builds the packaged source to verify that it is self-contained, without uploading it.
 
 Clippy enables `all`, `pedantic`, and `nursery`, with all warnings treated as errors. `unwrap_used`, `expect_used`, `indexing_slicing`, and `panic` are denied. The exact settings in `clippy.toml` allow `expect` and indexing in tests but do not allow explicit panics there; production code must handle those operations safely. Cognitive complexity is limited to 10, arguments to 4, and function length to 80 lines. The sole group exception is `struct_excessive_bools`: independent TOML configuration switches intentionally remain booleans.
 
@@ -161,7 +171,15 @@ Clippy enables `all`, `pedantic`, and `nursery`, with all warnings treated as er
 
 [CI](https://github.com/l3r8yJ/mdspec/actions/workflows/ci.yml) runs on pull requests and pushes to `main`, with sequential jobs: **formatting → strict Clippy → tests/coverage → release build**. `needs` prevents later jobs from running after a failed prerequisite; concurrency cancels superseded runs for the same PR or branch. Each job installs the pinned tools and calls the same `just` recipes as local development. Tests run once with coverage instrumentation; the next step enforces the 70% threshold without rerunning them. CI uploads LCOV for seven days and the smoke-tested Linux x86_64 release bundle with `SHA256SUMS` for 90 days.
 
-[Release](https://github.com/l3r8yJ/mdspec/actions/workflows/release.yml) runs when a `v*` tag is pushed. It requires the tag to equal `v` plus the package version in `Cargo.toml`, then finds the push-to-`main` CI run for the **exact tagged commit**. It waits if that run is still in progress and stops if CI failed or no matching run exists. Publication downloads the successful run's existing artifact, verifies checksums, and creates a GitHub Release. It does **not** repeat linting, tests, or compilation and never accepts a pull-request artifact. Versions containing a hyphen are marked as prereleases. Only publication has write permission; actions are SHA-pinned and no extra secrets are required.
+[Release](https://github.com/l3r8yJ/mdspec/actions/workflows/release.yml) runs when a `v*` tag is pushed. It requires the tag to equal `v` plus the package version in `Cargo.toml`, then finds the push-to-`main` CI run for the **exact tagged commit**. It waits if that run is still in progress and stops if CI failed or no matching run exists. It first publishes the verified source to crates.io using `CRATES_IO_TOKEN`, then downloads the successful run's binary artifact, verifies checksums, and creates a GitHub Release. It does **not** repeat linting, tests, or compilation and never accepts a pull-request artifact. `just publish` uses `cargo publish --locked --no-verify` because CI already built the packaged source; run `just publish-check` first if publishing manually. Versions containing a hyphen are marked as GitHub prereleases. Only the GitHub publication job has repository write permission; actions are SHA-pinned.
+
+### One-time crates.io setup
+
+1. Sign in to [crates.io](https://crates.io/) with GitHub and verify your email address.
+2. Create an [API token](https://crates.io/settings/tokens) with permission to publish `mdspec`. For the initial release it must also permit creating the new crate.
+3. Add it as the `CRATES_IO_TOKEN` repository secret under [GitHub Actions secrets](https://github.com/l3r8yJ/mdspec/settings/secrets/actions). Do not put the token in files or pull requests.
+
+The first publication establishes ownership of the crate name. crates.io versions cannot be overwritten; bump `Cargo.toml` and refresh `Cargo.lock` before publishing another version. If crates.io publication succeeds but GitHub publication fails, use GitHub Actions' **Re-run failed jobs** so the completed crates.io job is not repeated. After the initial release, tokenless [Trusted Publishing](https://crates.io/docs/trusted-publishing) is an alternative requiring a separate crates.io configuration and workflow change.
 
 Merge and let main CI start before tagging. If an artifact has expired or was deleted, rerun its main CI run before retrying the release. Tagging an unmerged branch or a commit with no main CI run intentionally fails.
 
