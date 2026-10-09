@@ -18,7 +18,10 @@ test:
 
 [positional-arguments]
 mutate *args:
-    cargo mutants --jobs 2 --build-timeout 300 "$@"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    workers="${CARGO_MUTANTS_JOBS:-$(( ({{ num_cpus() }} + 3) / 4 ))}"
+    cargo mutants --jobs "$workers" --build-timeout 300 "$@"
 
 test-coverage:
     cargo llvm-cov --locked --all-features --no-report
