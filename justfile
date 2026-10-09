@@ -62,3 +62,5 @@ verify-tag:
     fi
 
 ci: fmt-check clippy coverage package publish-check
+
+full: ci mutate

@@ -272,7 +272,10 @@ just build
 just package
 just publish-check
 just ci
+just full
 ```
+
+Before opening a PR, run `just fmt`, commit your changes, then run `just full`. It runs all CI checks followed by the full mutation suite and stops on failure. Commit first because the packaging check requires committed package files. Nothing is published.
 
 Tests drive real CLI processes and fixtures, covering valid and invalid documents, multiple simultaneous violations, Unicode, code blocks, cross-file references, custom English/Japanese labels, strict/config behavior, invalid UTF-8, output formats, exit codes, and directory traversal.
 
