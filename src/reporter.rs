@@ -44,10 +44,8 @@ impl Report {
             .any(|item| matches!(item.rule, "MDS900" | "MDS901" | "MDS902"))
         {
             2
-        } else if self.error_count > 0 {
-            1
         } else {
-            0
+            u8::from(self.error_count > 0)
         }
     }
 }
@@ -77,9 +75,6 @@ pub fn print(report: &Report, format: Format) -> io::Result<()> {
                     "{severity} {}: {}",
                     diagnostic.rule, diagnostic.message
                 )?;
-                if let Some(help) = miette::Diagnostic::help(diagnostic) {
-                    writeln!(output, "  Help: {help}")?;
-                }
                 writeln!(output)?;
             }
             writeln!(

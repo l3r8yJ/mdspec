@@ -6,6 +6,15 @@ A CLI validator for structured Markdown endpoint documentation. Checks document 
 
 Requires stable Rust 1.96.0, pinned in `rust-toolchain.toml`.
 
+Published versions can be installed from crates.io:
+
+```sh
+cargo install mdspec --locked
+mdspec --version
+```
+
+Cargo downloads the source package and compiles the executable for the user's system. GitHub Releases separately provides prebuilt Linux binaries. Before the first crates.io publication, or to build from a checkout:
+
 ```sh
 cargo build --release
 cargo install --path . --locked
@@ -70,7 +79,118 @@ CLI messages are in English; diagnostics quote configured labels when relevant. 
 - Structural headings inside lists or blockquotes are invalid. Code contents do not create headings or links. HTML comments do not count as content.
 - Any links or definitions require the references section. By default, it contains only definitions, at the end of the document. External inline links are allowed; local links and images must use reference style.
 
-See [rule catalog](docs/rules.md), [architecture](docs/architecture.md), and the full default configuration in [mdspec.toml](mdspec.toml).
+See the full default configuration in [mdspec.toml](mdspec.toml).
+
+## Rules
+
+Examples use the English labels above and show fragments of an otherwise valid document. `→` means “followed by”.
+
+### MDS001 — Endpoint heading
+
+Correct: `## Endpoint: List items`
+
+Incorrect: `## List items`
+
+### MDS002 — HTTP path
+
+Correct: `Path: GET /items` immediately after H2
+
+Incorrect: `Path: FETCH /items`
+
+### MDS003 — Required sections
+
+Correct: `### Logic` present
+
+Incorrect: No logic section
+
+### MDS004 — Section order and uniqueness
+
+Correct: Logic → Components → Mappings → References
+
+Incorrect: Mappings → Logic, or two Logic sections
+
+### MDS005 — Heading levels
+
+Correct: `#### Check` → `##### Description`
+
+Incorrect: `#### Check` → `###### Description`
+
+### MDS006 — Known sections (when enforced)
+
+Correct: `### Components`
+
+Incorrect: `### Extra`
+
+### MDS007 — Nonempty sections
+
+Correct: `### Logic` → `1. Return items.`
+
+Incorrect: `### Logic` → next H3
+
+### MDS008 — Component description
+
+Correct: `#### Check` → `##### Description` → `Check access.`
+
+Incorrect: Description missing or empty
+
+### MDS009 — Unique component names
+
+Correct: `#### Check` → `#### Fetch`
+
+Incorrect: Two `#### Check` headings
+
+### MDS010 — Mapping table under H4
+
+Correct:
+
+```md
+#### Item mapping
+
+| Source | Target |
+| --- | --- |
+| id | itemId |
+```
+
+Incorrect: No table, missing column, or empty required cell
+
+### MDS011 — Defined reference keys
+
+Correct: `[items][key]` with `[key]: items.md`
+
+Incorrect: `[items][missing]` without a definition
+
+### MDS012 — Existing local file
+
+Correct: `[key]: items.md` where the file exists
+
+Incorrect: `[key]: missing.md`
+
+### MDS013 — Existing anchor
+
+Correct: `[key]: items.md#check` with `## Check` in the target
+
+Incorrect: `[key]: items.md#missing`
+
+### MDS014 — Reference-style local links
+
+Correct: `[items][key]` with a definition
+
+Incorrect: `[items](items.md)`
+
+### MDS015 — Definitions at the end
+
+Correct: Final `### References` → definitions only
+
+Incorrect: Definition before Logic
+
+### MDS016 — Used definitions (strict mode)
+
+Correct: `[key]` plus its definition
+
+Incorrect: Definition with no usage
+
+
+MDS001–MDS015 are errors. MDS016 is enabled by `--strict` and is promoted to an error. Configuration can relax selected rules; see below.
 
 ## References and anchors
 
@@ -128,19 +248,55 @@ All fields are present. Severity is `error` or `warning`. Positions are one-base
 
 Configuration and filesystem failures also produce JSON. Clap argument errors use text on stderr and exit `2`; stdout is empty. Help and version output are always text.
 
-## Development
+## Contributing
+
+Install the development tools once:
 
 ```sh
-cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo test
-cargo build --release
+cargo install just --version 1.58.0 --locked
+cargo install cargo-llvm-cov --version 0.9.1 --locked
+cargo install cargo-mutants --version 27.1.0 --locked
+rustup component add llvm-tools-preview
 ```
 
+The `justfile` is shared by local development and CI:
+
+```sh
+just fmt
+just fmt-check
+just clippy
+just test
+just coverage
+just mutate
+just build
+just package
+just publish-check
+just ci
+just full
+```
+
+Before opening a PR, run `just fmt`, commit your changes, then run `just full`. It runs all CI checks followed by the full mutation suite and stops on failure. Commit first because the packaging check requires committed package files. Nothing is published.
+
 Tests drive real CLI processes and fixtures, covering valid and invalid documents, multiple simultaneous violations, Unicode, code blocks, cross-file references, custom English/Japanese labels, strict/config behavior, invalid UTF-8, output formats, exit codes, and directory traversal.
+
+`just coverage` runs the tests once with LLVM instrumentation, then fails if total line coverage is below **90%**. Integration-test sources and dependencies are excluded by cargo-llvm-cov's default filters. CLI subprocesses contribute coverage. `target/coverage/lcov.info` contains the report. `just ci` runs formatting, strict linting, tests with coverage, binary packaging, and a crates.io publication dry run; it does not also run the standalone `just test` recipe. `just publish-check` builds the packaged source to verify that it is self-contained, without uploading it.
+
+Clippy enables `all`, `pedantic`, and `nursery`, with all warnings treated as errors. `unwrap_used`, `expect_used`, `indexing_slicing`, and `panic` are denied. The exact settings in `clippy.toml` allow `expect` and indexing in tests but do not allow explicit panics there; production code must handle those operations safely. Cognitive complexity is limited to 10, arguments to 4, and function length to 80 lines. The sole group exception is `struct_excessive_bools`: independent TOML configuration switches intentionally remain booleans.
+
+### Mutation testing
+
+`just mutate` changes production code in temporary copies and checks whether tests detect each change. It runs separately from `just ci` because it repeatedly builds and tests the project.
+
+- `just mutate --list`: preview mutations without running tests.
+- `just mutate --file src/rules.rs`: focus on one file.
+- Results: `mutants.out/outcomes.json` and per-mutation logs.
+- Gate: missed mutations or timeouts fail the command. Unbuildable mutations are reported separately.
+- Limits: two workers, 300 seconds per build, and a test timeout of five times baseline duration with a 20-second minimum.
+
+Configure features, file/function filters, and test timeout settings in `.cargo/mutants.toml`. Mutation runs cap compiler lint severity so generated warnings do not prevent testing; normal builds and Clippy still deny warnings.
+
+The **Mutation testing** GitHub workflow runs manually or every Monday at 04:00 UTC and retains reports for 14 days. Review missed mutations before adding tests: some changes preserve behavior. There is no configured mutation-score percentage gate; the 90% threshold applies only to line coverage.
 
 ## Limits
 
 CommonMark accepts almost any text; an unclosed code fence is not itself a syntax error. Schema violations are still checked. Repeated reference definitions use CommonMark first-wins without a separate duplicate diagnostic. YAML front matter, wiki links, footnotes, explicit HTML anchors, autofixes, plugins, and watch mode are outside the MVP. A single run uses one label configuration for all input documents; mixed structural vocabularies require separate runs.
-
-Next steps: agree on renderer-specific anchor behavior and add CI distribution of binaries. An incremental dependency graph should wait for measurements on a large corpus.

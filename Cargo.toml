@@ -5,11 +5,27 @@ edition = "2024"
 rust-version = "1.96"
 description = "Validate structured Markdown endpoint documentation"
 license = "MIT"
+repository = "https://github.com/l3r8yJ/mdspec"
+readme = "README.md"
+keywords = ["markdown", "validation", "documentation", "cli", "api"]
+categories = ["command-line-utilities", "development-tools"]
+include = [
+    "/.cargo/mutants.toml",
+    "/src/**",
+    "/tests/**",
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/README.md",
+    "/LICENSE",
+    "/mdspec.toml",
+    "/clippy.toml",
+    "/rust-toolchain.toml",
+    "/justfile",
+]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 pulldown-cmark = { version = "0.13.4", default-features = false }
-miette = { version = "7", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.9"
@@ -26,3 +42,15 @@ strip = true
 
 [lints.rust]
 unsafe_code = "forbid"
+warnings = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+struct_excessive_bools = "allow"
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+panic = "deny"
+cognitive_complexity = "warn"

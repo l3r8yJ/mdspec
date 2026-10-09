@@ -56,7 +56,7 @@ pub fn discover(path: &Path) -> (Vec<PathBuf>, Vec<Diagnostic>) {
                 if entry.file_type().is_some_and(|kind| kind.is_file())
                     && is_markdown(entry.path()) =>
             {
-                files.push(entry.into_path())
+                files.push(entry.into_path());
             }
             Ok(_) => (),
             Err(error) => diagnostics.push(Diagnostic::error(

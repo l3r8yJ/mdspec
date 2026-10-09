@@ -59,11 +59,12 @@ impl Labels {
         ];
         sections.iter().chain(labels.iter()).all(|label| {
             !label.is_empty() && label.trim() == *label && !label.contains(['\n', '\r'])
-        }) && sections
-            .iter()
-            .enumerate()
-            .all(|(index, label)| !sections[..index].contains(label))
-            && self.source != self.target
+        }) && sections.iter().enumerate().all(|(index, label)| {
+            !sections
+                .iter()
+                .take(index)
+                .any(|previous| previous == label)
+        }) && self.source != self.target
     }
 }
 

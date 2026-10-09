@@ -32,14 +32,8 @@ fn children(blocks: &[Block], index: usize, depth: u8) -> &[Block] {
     rest.get(..length).unwrap_or_default()
 }
 
-fn issue(
-    diagnostics: &mut Vec<Diagnostic>,
-    rule: &'static str,
-    path: &Path,
-    block: &Block,
-    message: impl Into<String>,
-) {
-    diagnostics.push(Diagnostic::error(rule, path, Some(block.position), message));
+fn issue(rule: &'static str, path: &Path, block: &Block, message: impl Into<String>) -> Diagnostic {
+    Diagnostic::error(rule, path, Some(block.position), message)
 }
 
 fn validate_endpoint(
@@ -70,8 +64,7 @@ fn validate_endpoint(
                 .strip_prefix(config.labels.endpoint_prefix.as_str())
                 .is_none_or(|name| name.trim().is_empty())
         {
-            issue(
-                diagnostics,
+            diagnostics.push(issue(
                 "MDS001",
                 path,
                 heading,
@@ -79,7 +72,7 @@ fn validate_endpoint(
                     "Expected one H2 heading: {} name",
                     config.labels.endpoint_prefix
                 ),
-            );
+            ));
         }
     }
     let paths: Vec<_> = document
@@ -103,13 +96,12 @@ fn validate_endpoint(
             format!("Missing {} METHOD /path", config.labels.path_prefix),
         ));
     }
-    for (number, (index, block)) in paths.iter().enumerate() {
+    for (index, block) in paths {
         let immediately_after_endpoint = headings
             .first()
-            .is_some_and(|(heading_index, _)| *index == heading_index + 1);
-        if number > 0 || !immediately_after_endpoint || !valid_path(&block.text, &config.labels) {
-            issue(
-                diagnostics,
+            .is_some_and(|(heading_index, _)| index == heading_index + 1);
+        if !immediately_after_endpoint || !valid_path(&block.text, &config.labels) {
+            diagnostics.push(issue(
                 "MDS002",
                 path,
                 block,
@@ -117,7 +109,7 @@ fn validate_endpoint(
                     "Expected one {} METHOD /path paragraph immediately after the endpoint heading",
                     config.labels.path_prefix
                 ),
-            );
+            ));
         }
     }
 }
@@ -144,7 +136,7 @@ fn validate_sections(
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let mut seen = HashSet::new();
-    let mut last_rank = None;
+    let mut next_rank = 0;
     for (index, block) in document.blocks.iter().enumerate() {
         if !matches!(block.kind, BlockKind::Heading(3)) {
             continue;
@@ -157,21 +149,23 @@ fn validate_sections(
             .position(|section| *section == name)
         else {
             if !config.document.allow_unknown_sections {
-                issue(
-                    diagnostics,
+                diagnostics.push(issue(
                     "MDS006",
                     path,
                     block,
                     format!("Unknown section: {name}"),
-                );
+                ));
             }
             continue;
         };
-        if !seen.insert(name)
-            || (config.document.enforce_section_order && last_rank.is_some_and(|last| rank < last))
-        {
-            issue(
-                diagnostics,
+        let unique = seen.insert(name);
+        let invalid_order = if config.document.enforce_section_order {
+            rank < next_rank
+        } else {
+            !unique
+        };
+        if invalid_order {
+            diagnostics.push(issue(
                 "MDS004",
                 path,
                 block,
@@ -179,9 +173,9 @@ fn validate_sections(
                     "Sections must be unique and ordered: {}",
                     config.labels.sections().join(", ")
                 ),
-            );
+            ));
         }
-        last_rank = Some(last_rank.map_or(rank, |last: usize| last.max(rank)));
+        next_rank = next_rank.max(rank + 1);
         let contents = children(&document.blocks, index, 3);
         let populated = match rank {
             0 => contents.iter().any(has_content),
@@ -191,15 +185,23 @@ fn validate_sections(
             _ => true,
         };
         if !populated {
-            issue(
-                diagnostics,
+            diagnostics.push(issue(
                 "MDS007",
                 path,
                 block,
                 format!("Empty section: {name}"),
-            );
+            ));
         }
     }
+    validate_required_sections(&seen, path, config, diagnostics);
+}
+
+fn validate_required_sections(
+    seen: &HashSet<&str>,
+    path: &Path,
+    config: &Config,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
     for (name, required) in [
         (config.labels.logic.as_str(), config.document.require_logic),
         (
@@ -262,8 +264,7 @@ fn validate_nesting(
             _ => false,
         };
         if !valid {
-            issue(
-                diagnostics,
+            diagnostics.push(issue(
                 "MDS005",
                 path,
                 block,
@@ -271,7 +272,7 @@ fn validate_nesting(
                     "Invalid heading nesting: H2 endpoint, H3 section, H4 component/mapping, H5 {}",
                     config.labels.description
                 ),
-            );
+            ));
         }
     }
     diagnostics.extend(document.nested_headings.iter().map(|position| {
@@ -296,13 +297,12 @@ fn validate_components(
             continue;
         }
         if !names.insert(block.text.trim()) {
-            issue(
-                diagnostics,
+            diagnostics.push(issue(
                 "MDS009",
                 path,
                 block,
                 format!("Duplicate component name: {}", block.text),
-            );
+            ));
         }
         let contents = children(blocks, index, 4);
         let descriptions: Vec<_> = contents
@@ -314,8 +314,7 @@ fn validate_components(
             })
             .collect();
         if descriptions.is_empty() {
-            issue(
-                diagnostics,
+            diagnostics.push(issue(
                 "MDS008",
                 path,
                 block,
@@ -323,7 +322,7 @@ fn validate_components(
                     "Component {} is missing H5 {}",
                     block.text, labels.description
                 ),
-            );
+            ));
         }
         for (number, (description_index, description)) in descriptions.iter().enumerate() {
             if number > 0
@@ -331,8 +330,7 @@ fn validate_components(
                     .iter()
                     .any(has_content)
             {
-                issue(
-                    diagnostics,
+                diagnostics.push(issue(
                     "MDS008",
                     path,
                     description,
@@ -340,7 +338,7 @@ fn validate_components(
                         "Component {} must have one nonempty description",
                         block.text
                     ),
-                );
+                ));
             }
         }
     }
@@ -363,8 +361,7 @@ fn validate_mappings(
                 .filter(|child| matches!(child.kind, BlockKind::Table(_)))
                 .collect();
             if tables.is_empty() {
-                issue(
-                    diagnostics,
+                diagnostics.push(issue(
                     "MDS010",
                     path,
                     block,
@@ -372,19 +369,18 @@ fn validate_mappings(
                         "Mapping {} must contain a table directly under its H4 heading",
                         block.text
                     ),
-                );
+                ));
             }
             for table in tables {
                 validate_table(table, path, labels, diagnostics);
             }
         } else if matches!(block.kind, BlockKind::Table(_)) && !inside_mapping {
-            issue(
-                diagnostics,
+            diagnostics.push(issue(
                 "MDS010",
                 path,
                 block,
                 "A mapping table must belong to a named H4 mapping",
-            );
+            ));
         }
     }
 }
@@ -397,8 +393,7 @@ fn validate_table(block: &Block, path: &Path, labels: &Labels, diagnostics: &mut
     let source = headers.iter().position(|name| name.trim() == labels.source);
     let target = headers.iter().position(|name| name.trim() == labels.target);
     let (Some(source), Some(target)) = (source, target) else {
-        issue(
-            diagnostics,
+        diagnostics.push(issue(
             "MDS010",
             path,
             block,
@@ -406,7 +401,7 @@ fn validate_table(block: &Block, path: &Path, labels: &Labels, diagnostics: &mut
                 "A mapping table must have {} and {} columns",
                 labels.source, labels.target
             ),
-        );
+        ));
         return;
     };
     if rows.len() < 2
@@ -416,8 +411,7 @@ fn validate_table(block: &Block, path: &Path, labels: &Labels, diagnostics: &mut
                 .any(|index| row.get(*index).is_none_or(|value| value.trim().is_empty()))
         })
     {
-        issue(
-            diagnostics,
+        diagnostics.push(issue(
             "MDS010",
             path,
             block,
@@ -425,6 +419,6 @@ fn validate_table(block: &Block, path: &Path, labels: &Labels, diagnostics: &mut
                 "A mapping table must have data rows with nonempty {} and {} cells",
                 labels.source, labels.target
             ),
-        );
+        ));
     }
 }
