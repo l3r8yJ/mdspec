@@ -1,0 +1,16 @@
+docker:
+  image: rust:1.96.0-bookworm
+  as_root: true
+
+assets:
+  credentials: l3r8yJ/home#assets/crates-credentials
+
+install: |
+  apt-get update
+  apt-get install -y --no-install-recommends jq
+  cargo install just --version 1.58.0 --locked
+
+release:
+  script: |
+    export RELEASE_TAG="${tag}"
+    bash scripts/rultor-release.sh

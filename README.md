@@ -79,7 +79,32 @@ CLI messages are in English; diagnostics quote configured labels when relevant. 
 - Structural headings inside lists or blockquotes are invalid. Code contents do not create headings or links. HTML comments do not count as content.
 - Any links or definitions require the references section. By default, it contains only definitions, at the end of the document. External inline links are allowed; local links and images must use reference style.
 
-See [rule catalog](docs/rules.md), [architecture](docs/architecture.md), and the full default configuration in [mdspec.toml](mdspec.toml).
+See the full default configuration in [mdspec.toml](mdspec.toml).
+
+## Rules
+
+Examples use the English labels above and show fragments of an otherwise valid document. `→` means “followed by”.
+
+| Rule | Correct example | Incorrect example |
+|---|---|---|
+| MDS001 — Endpoint heading | `## Endpoint: List items` | `## List items` |
+| MDS002 — HTTP path | `Path: GET /items` immediately after H2 | `Path: FETCH /items` |
+| MDS003 — Required sections | `### Logic` present | No logic section |
+| MDS004 — Section order and uniqueness | Logic → Components → Mappings → References | Mappings → Logic, or two Logic sections |
+| MDS005 — Heading levels | `#### Check` → `##### Description` | `#### Check` → `###### Description` |
+| MDS006 — Known sections (when enforced) | `### Components` | `### Extra` |
+| MDS007 — Nonempty sections | `### Logic` → `1. Return items.` | `### Logic` → next H3 |
+| MDS008 — Component description | `#### Check` → `##### Description` → `Check access.` | Description missing or empty |
+| MDS009 — Unique component names | `#### Check` → `#### Fetch` | Two `#### Check` headings |
+| MDS010 — Mapping table under H4 | `Source \| Target`<br>`--- \| ---`<br>`id \| itemId` | No table, missing column, or empty required cell |
+| MDS011 — Defined reference keys | `[items][key]` with `[key]: items.md` | `[items][missing]` without a definition |
+| MDS012 — Existing local file | `[key]: items.md` where the file exists | `[key]: missing.md` |
+| MDS013 — Existing anchor | `[key]: items.md#check` with `## Check` in the target | `[key]: items.md#missing` |
+| MDS014 — Reference-style local links | `[items][key]` with a definition | `[items](items.md)` |
+| MDS015 — Definitions at the end | Final `### References` → definitions only | Definition before Logic |
+| MDS016 — Used definitions (strict mode) | `[key]` plus its definition | Definition with no usage |
+
+MDS001–MDS015 are errors. MDS016 is enabled by `--strict` and is promoted to an error. Configuration can relax selected rules; see below.
 
 ## References and anchors
 
@@ -137,7 +162,7 @@ All fields are present. Severity is `error` or `warning`. Positions are one-base
 
 Configuration and filesystem failures also produce JSON. Clap argument errors use text on stderr and exit `2`; stdout is empty. Help and version output are always text.
 
-## Development
+## Contributing
 
 Install the development tools once:
 
@@ -167,35 +192,6 @@ Tests drive real CLI processes and fixtures, covering valid and invalid document
 
 Clippy enables `all`, `pedantic`, and `nursery`, with all warnings treated as errors. `unwrap_used`, `expect_used`, `indexing_slicing`, and `panic` are denied. The exact settings in `clippy.toml` allow `expect` and indexing in tests but do not allow explicit panics there; production code must handle those operations safely. Cognitive complexity is limited to 10, arguments to 4, and function length to 80 lines. The sole group exception is `struct_excessive_bools`: independent TOML configuration switches intentionally remain booleans.
 
-## GitHub Actions and releases
-
-[CI](https://github.com/l3r8yJ/mdspec/actions/workflows/ci.yml) runs on pull requests and pushes to `main`, with sequential jobs: **formatting → strict Clippy → tests/coverage → release build**. `needs` prevents later jobs from running after a failed prerequisite; concurrency cancels superseded runs for the same PR or branch. Each job installs the pinned tools and calls the same `just` recipes as local development. Tests run once with coverage instrumentation; the next step enforces the 70% threshold without rerunning them. CI uploads LCOV for seven days and the smoke-tested Linux x86_64 release bundle with `SHA256SUMS` for 90 days.
-
-[Release](https://github.com/l3r8yJ/mdspec/actions/workflows/release.yml) runs when a `v*` tag is pushed. It requires the tag to equal `v` plus the package version in `Cargo.toml`, then finds the push-to-`main` CI run for the **exact tagged commit**. It waits if that run is still in progress and stops if CI failed or no matching run exists. It first publishes the verified source to crates.io using `CRATES_IO_TOKEN`, then downloads the successful run's binary artifact, verifies checksums, and creates a GitHub Release. It does **not** repeat linting, tests, or compilation and never accepts a pull-request artifact. `just publish` uses `cargo publish --locked --no-verify` because CI already built the packaged source; run `just publish-check` first if publishing manually. Versions containing a hyphen are marked as GitHub prereleases. Only the GitHub publication job has repository write permission; actions are SHA-pinned.
-
-### One-time crates.io setup
-
-1. Sign in to [crates.io](https://crates.io/) with GitHub and verify your email address.
-2. Create an [API token](https://crates.io/settings/tokens) with permission to publish `mdspec`. For the initial release it must also permit creating the new crate.
-3. Add it as the `CRATES_IO_TOKEN` repository secret under [GitHub Actions secrets](https://github.com/l3r8yJ/mdspec/settings/secrets/actions). Do not put the token in files or pull requests.
-
-The first publication establishes ownership of the crate name. crates.io versions cannot be overwritten; bump `Cargo.toml` and refresh `Cargo.lock` before publishing another version. If crates.io publication succeeds but GitHub publication fails, use GitHub Actions' **Re-run failed jobs** so the completed crates.io job is not repeated. After the initial release, tokenless [Trusted Publishing](https://crates.io/docs/trusted-publishing) is an alternative requiring a separate crates.io configuration and workflow change.
-
-Merge and let main CI start before tagging. If an artifact has expired or was deleted, rerun its main CI run before retrying the release. Tagging an unmerged branch or a commit with no main CI run intentionally fails.
-
-To release after merging the workflows, update the package version and lockfile through a PR, then tag the intended commit:
-
-```sh
-git switch main
-git pull --ff-only
-git tag -a v0.1.0 -m "Release v0.1.0"
-git push origin v0.1.0
-```
-
-Replace `0.1.0` with the actual package version. Tag publication creates a public release automatically; tags are not created by CI. Archives contain `mdspec` and are built on Ubuntu 24.04 for `x86_64-unknown-linux-gnu`, so they require a compatible Linux/glibc environment. macOS, Windows, and static-musl distributions are not built yet. Verify a downloaded archive with `sha256sum --check SHA256SUMS` from the directory containing both files.
-
 ## Limits
 
 CommonMark accepts almost any text; an unclosed code fence is not itself a syntax error. Schema violations are still checked. Repeated reference definitions use CommonMark first-wins without a separate duplicate diagnostic. YAML front matter, wiki links, footnotes, explicit HTML anchors, autofixes, plugins, and watch mode are outside the MVP. A single run uses one label configuration for all input documents; mixed structural vocabularies require separate runs.
-
-Next steps: agree on renderer-specific anchor behavior and add CI distribution of binaries. An incremental dependency graph should wait for measurements on a large corpus.
