@@ -96,11 +96,11 @@ fn validate_endpoint(
             format!("Missing {} METHOD /path", config.labels.path_prefix),
         ));
     }
-    for (number, (index, block)) in paths.iter().enumerate() {
+    for (index, block) in paths {
         let immediately_after_endpoint = headings
             .first()
-            .is_some_and(|(heading_index, _)| *index == heading_index + 1);
-        if number > 0 || !immediately_after_endpoint || !valid_path(&block.text, &config.labels) {
+            .is_some_and(|(heading_index, _)| index == heading_index + 1);
+        if !immediately_after_endpoint || !valid_path(&block.text, &config.labels) {
             diagnostics.push(issue(
                 "MDS002",
                 path,
@@ -136,7 +136,7 @@ fn validate_sections(
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let mut seen = HashSet::new();
-    let mut last_rank = None;
+    let mut next_rank = 0;
     for (index, block) in document.blocks.iter().enumerate() {
         if !matches!(block.kind, BlockKind::Heading(3)) {
             continue;
@@ -158,9 +158,13 @@ fn validate_sections(
             }
             continue;
         };
-        if !seen.insert(name)
-            || (config.document.enforce_section_order && last_rank.is_some_and(|last| rank < last))
-        {
+        let unique = seen.insert(name);
+        let invalid_order = if config.document.enforce_section_order {
+            rank < next_rank
+        } else {
+            !unique
+        };
+        if invalid_order {
             diagnostics.push(issue(
                 "MDS004",
                 path,
@@ -171,7 +175,7 @@ fn validate_sections(
                 ),
             ));
         }
-        last_rank = Some(last_rank.map_or(rank, |last: usize| last.max(rank)));
+        next_rank = next_rank.max(rank + 1);
         let contents = children(&document.blocks, index, 3);
         let populated = match rank {
             0 => contents.iter().any(has_content),
@@ -189,6 +193,15 @@ fn validate_sections(
             ));
         }
     }
+    validate_required_sections(&seen, path, config, diagnostics);
+}
+
+fn validate_required_sections(
+    seen: &HashSet<&str>,
+    path: &Path,
+    config: &Config,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
     for (name, required) in [
         (config.labels.logic.as_str(), config.document.require_logic),
         (

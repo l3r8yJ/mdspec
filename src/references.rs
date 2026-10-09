@@ -226,21 +226,18 @@ impl Validation<'_> {
 }
 
 fn definition_is_terminal(document: &Document, offset: usize, references: Option<&Block>) -> bool {
-    let Some(references) = references.filter(|section| section.position.offset < offset) else {
+    let Some(references) = references else {
         return false;
     };
-    let root_definition = document.blocks.iter().any(|block| {
-        matches!(block.kind, BlockKind::Definition) && block.position.offset == offset
-    });
-    let intervening_section = document.blocks.iter().any(|block| {
-        matches!(block.kind, BlockKind::Heading(1..=3))
-            && block.position.offset > references.position.offset
-            && block.position.offset < offset
-    });
-    let subsequent_content = document.blocks.iter().any(|block| {
-        block.position.offset > offset && !matches!(block.kind, BlockKind::Definition)
-    });
-    root_definition && !intervening_section && !subsequent_content
+    let mut content = document
+        .blocks
+        .iter()
+        .skip_while(|block| !std::ptr::eq(*block, references))
+        .skip(1);
+    content
+        .clone()
+        .all(|block| matches!(block.kind, BlockKind::Definition))
+        && content.any(|block| block.position.offset == offset)
 }
 
 fn check_file(target: &Path) -> Result<(), String> {

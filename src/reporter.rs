@@ -75,9 +75,6 @@ pub fn print(report: &Report, format: Format) -> io::Result<()> {
                     "{severity} {}: {}",
                     diagnostic.rule, diagnostic.message
                 )?;
-                if let Some(help) = miette::Diagnostic::help(diagnostic) {
-                    writeln!(output, "  Help: {help}")?;
-                }
                 writeln!(output)?;
             }
             writeln!(

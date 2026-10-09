@@ -1,6 +1,5 @@
 use crate::model::Position;
 use serde::Serialize;
-use std::fmt;
 use std::path::Path;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -37,30 +36,5 @@ impl Diagnostic {
             message: message.into(),
             help: None,
         }
-    }
-}
-
-impl fmt::Display for Diagnostic {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}", self.message)
-    }
-}
-
-impl std::error::Error for Diagnostic {}
-
-impl miette::Diagnostic for Diagnostic {
-    fn code<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
-        Some(Box::new(self.rule))
-    }
-    fn severity(&self) -> Option<miette::Severity> {
-        Some(match self.severity {
-            Severity::Error => miette::Severity::Error,
-            Severity::Warning => miette::Severity::Warning,
-        })
-    }
-    fn help<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
-        self.help
-            .as_ref()
-            .map(|help| Box::new(help) as Box<dyn fmt::Display>)
     }
 }

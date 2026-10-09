@@ -49,7 +49,7 @@ pub fn parse(source: &str) -> Document {
         if !document
             .blocks
             .iter()
-            .any(|block| block.position.offset <= span.start && span.start < block.end)
+            .any(|block| (block.position.offset..block.end).contains(&span.start))
         {
             document.blocks.push(Block {
                 kind: BlockKind::Definition,
@@ -170,7 +170,6 @@ impl ParseState<'_> {
                     self.document.nested_headings.push(start);
                 }
             }
-            Tag::Table(_) => self.table_rows.clear(),
             Tag::TableHead | Tag::TableRow => self.table_rows.push(Vec::new()),
             Tag::TableCell => self.cell = Some(String::new()),
             Tag::Link {
@@ -225,9 +224,12 @@ impl ParseState<'_> {
                     row.push(value);
                 }
             }
-            TagEnd::Table if self.depth == 0 => {
-                if let Some(block) = self.document.blocks.last_mut() {
-                    block.kind = BlockKind::Table(std::mem::take(&mut self.table_rows));
+            TagEnd::Table => {
+                let rows = std::mem::take(&mut self.table_rows);
+                if let Some(block) = self.document.blocks.last_mut()
+                    && matches!(block.kind, BlockKind::Table(_))
+                {
+                    block.kind = BlockKind::Table(rows);
                 }
             }
             TagEnd::Paragraph | TagEnd::Item => {
@@ -329,5 +331,51 @@ mod tests {
         let document = parse("<!--\n empty \n-->\n\nText <!-- hidden --> visible.\n");
         assert_that!(document.blocks[0].text.is_empty()).is_equal_to(true);
         assert_that!(document.blocks[1].text.trim()).is_equal_to("Text  visible.");
+    }
+
+    #[test]
+    fn preserves_breaks_between_words_in_multiline_content_and_headings() {
+        let document =
+            parse("First\nsecond\n======\n\nThird  \nfourth\n\n- Fifth\n\n  Sixth\n- Seventh\n");
+        assert_that!(document.headings[0].0.as_str()).is_equal_to("First second");
+        assert_that!(document.blocks[0].text.as_str()).is_equal_to("First\nsecond");
+        assert_that!(document.blocks[1].text.as_str()).is_equal_to("Third\nfourth\n");
+        assert_that!(document.blocks[2].text.as_str()).is_equal_to("Fifth\nSixth\n\nSeventh\n\n");
+    }
+
+    #[test]
+    fn keeps_inline_html_out_of_heading_names_but_preserves_body_markup() {
+        let document = parse("## <em>Name</em>\n\nText <em>body</em>\n");
+        assert_that!(document.blocks[0].text.as_str()).is_equal_to("Name");
+        assert_that!(document.blocks[1].text.trim()).is_equal_to("Text <em>body</em>");
+    }
+
+    #[test]
+    fn keeps_nested_tables_inside_their_containing_blocks() {
+        let document = parse(
+            "> | Source | Target |\n> | --- | --- |\n> | hidden | nested |\n\n| Source | Target |\n| --- | --- |\n| actual | value |\n",
+        );
+        assert_that!(document.blocks.len()).is_equal_to(2);
+        assert_that!(matches!(document.blocks[0].kind, BlockKind::Content)).is_equal_to(true);
+        assert_that!(matches!(&document.blocks[1].kind, BlockKind::Table(rows) if rows.len() == 2 && rows[1] == ["actual", "value"])).is_equal_to(true);
+    }
+
+    #[test]
+    fn keeps_nested_rules_inside_their_containing_blocks() {
+        let document = parse("before\n\n---\n\n> after\n>\n> ---\n>\n> final\n");
+        assert_that!(document.blocks.len()).is_equal_to(3);
+        assert_that!(document.blocks[1].text.is_empty()).is_equal_to(true);
+        assert_that!(document.blocks[2].text.trim()).is_equal_to("after\nfinal");
+    }
+
+    #[test]
+    fn omits_multiline_html_comments_but_preserves_adjacent_html() {
+        let document = parse("<!--\n hidden\n-->\n<div>\nvisible\n</div>\n");
+        let text: String = document
+            .blocks
+            .iter()
+            .map(|block| block.text.as_str())
+            .collect();
+        assert_that!(text.as_str()).is_equal_to("<div>\nvisible\n</div>\n");
     }
 }
