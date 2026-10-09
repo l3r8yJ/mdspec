@@ -255,6 +255,7 @@ Install the development tools once:
 ```sh
 cargo install just --version 1.58.0 --locked
 cargo install cargo-llvm-cov --version 0.9.1 --locked
+cargo install cargo-mutants --version 27.1.0 --locked
 rustup component add llvm-tools-preview
 ```
 
@@ -266,6 +267,7 @@ just fmt-check
 just clippy
 just test
 just coverage
+just mutate
 just build
 just package
 just publish-check
@@ -277,6 +279,20 @@ Tests drive real CLI processes and fixtures, covering valid and invalid document
 `just coverage` runs the tests once with LLVM instrumentation, then fails if total line coverage is below **70%**. Integration-test sources and dependencies are excluded by cargo-llvm-cov's default filters. CLI subprocesses contribute coverage. `target/coverage/lcov.info` contains the report. `just ci` runs formatting, strict linting, tests with coverage, binary packaging, and a crates.io publication dry run; it does not also run the standalone `just test` recipe. `just publish-check` builds the packaged source to verify that it is self-contained, without uploading it.
 
 Clippy enables `all`, `pedantic`, and `nursery`, with all warnings treated as errors. `unwrap_used`, `expect_used`, `indexing_slicing`, and `panic` are denied. The exact settings in `clippy.toml` allow `expect` and indexing in tests but do not allow explicit panics there; production code must handle those operations safely. Cognitive complexity is limited to 10, arguments to 4, and function length to 80 lines. The sole group exception is `struct_excessive_bools`: independent TOML configuration switches intentionally remain booleans.
+
+### Mutation testing
+
+`just mutate` changes production code in temporary copies and checks whether tests detect each change. It runs separately from `just ci` because it repeatedly builds and tests the project.
+
+- `just mutate --list`: preview mutations without running tests.
+- `just mutate --file src/rules.rs`: focus on one file.
+- Results: `mutants.out/outcomes.json` and per-mutation logs.
+- Gate: missed mutations or timeouts fail the command. Unbuildable mutations are reported separately.
+- Limits: two workers, 300 seconds per build, and a test timeout of five times baseline duration with a 20-second minimum.
+
+Configure features, file/function filters, and test timeout settings in `.cargo/mutants.toml`. Mutation runs cap compiler lint severity so generated warnings do not prevent testing; normal builds and Clippy still deny warnings.
+
+The **Mutation testing** GitHub workflow runs manually or every Monday at 04:00 UTC and retains reports for 14 days. Review missed mutations before adding tests: some changes preserve behavior. There is no configured mutation-score percentage gate; the 70% threshold applies only to line coverage.
 
 ## Limits
 

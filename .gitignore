@@ -5,3 +5,5 @@
 !/.env.example
 
 /dist/
+/mutants.out/
+/mutants.out.old/

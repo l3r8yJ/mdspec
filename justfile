@@ -16,6 +16,10 @@ clippy:
 test:
     cargo test --locked --all-features
 
+[positional-arguments]
+mutate *args:
+    cargo mutants --jobs 2 --build-timeout 300 "$@"
+
 test-coverage:
     cargo llvm-cov --locked --all-features --no-report
 

@@ -1,0 +1,5 @@
+all_features = true
+additional_cargo_args = ["--locked"]
+cap_lints = true
+timeout_multiplier = 5
+minimum_test_timeout = 20
