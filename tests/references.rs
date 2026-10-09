@@ -1,4 +1,4 @@
-#![allow(clippy::expect_used)]
+#![cfg(test)]
 
 use asserting::prelude::*;
 use serde_json::Value;

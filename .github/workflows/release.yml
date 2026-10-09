@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -16,46 +17,57 @@ defaults:
     shell: bash
 
 jobs:
-  version:
-    name: Validate release tag
+  verified-ci:
+    name: Validate tag and reuse CI
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 45
+    outputs:
+      run-id: ${{ steps.ci.outputs.run-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - name: Install pinned Rust toolchain
         run: rustup show active-toolchain
+      - name: Install just
+        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad
+        with:
+          tool: just@1.58.0
       - name: Match tag to package version
         env:
           RELEASE_TAG: ${{ github.ref_name }}
+        run: just verify-tag
+      - name: Find and await CI for the exact tagged main commit
+        id: ci
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          version=$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "mdspec") | .version')
-          if [[ "$RELEASE_TAG" != "v${version}" ]]; then
-            echo "Release tag ${RELEASE_TAG} must match Cargo.toml version v${version}" >&2
+          commit_sha=$(git rev-parse HEAD)
+          run_id=$(gh run list --workflow ci.yml --commit "$commit_sha" --branch main --event push --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [[ -z "$run_id" ]]; then
+            echo 'No main-branch push CI run exists for this commit. Merge it and run CI before tagging.' >&2
             exit 1
           fi
-
-  ci:
-    name: Verify release
-    needs: version
-    uses: ./.github/workflows/ci.yml
-    permissions:
-      contents: read
+          gh run watch "$run_id" --exit-status --interval 10
+          echo "run-id=$run_id" >> "$GITHUB_OUTPUT"
 
   publish:
-    name: Publish GitHub release
-    needs: ci
+    name: Publish verified artifact
+    needs: verified-ci
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
+      actions: read
     steps:
-      - name: Download verified release bundle
+      - name: Download the successful CI artifact
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: mdspec-linux-x86_64
           path: dist
+          run-id: ${{ needs.verified-ci.outputs.run-id }}
+          github-token: ${{ github.token }}
       - name: Verify checksums
         working-directory: dist
         run: sha256sum --check SHA256SUMS

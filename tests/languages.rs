@@ -1,3 +1,4 @@
+#![cfg(test)]
 use asserting::prelude::*;
 use serde_json::Value;
 use std::process::Command;

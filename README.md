@@ -130,20 +130,40 @@ Configuration and filesystem failures also produce JSON. Clap argument errors us
 
 ## Development
 
+Install the development tools once:
+
 ```sh
-cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo test
-cargo build --release
+cargo install just --version 1.58.0 --locked
+cargo install cargo-llvm-cov --version 0.9.1 --locked
+rustup component add llvm-tools-preview
+```
+
+The `justfile` is shared by local development and CI:
+
+```sh
+just fmt
+just fmt-check
+just clippy
+just test
+just coverage
+just build
+just package
+just ci
 ```
 
 Tests drive real CLI processes and fixtures, covering valid and invalid documents, multiple simultaneous violations, Unicode, code blocks, cross-file references, custom English/Japanese labels, strict/config behavior, invalid UTF-8, output formats, exit codes, and directory traversal.
 
+`just coverage` runs the tests once with LLVM instrumentation, then fails if total line coverage is below **70%**. Integration-test sources and dependencies are excluded by cargo-llvm-cov's default filters. CLI subprocesses contribute coverage. `target/coverage/lcov.info` contains the report. `just ci` runs formatting, strict linting, tests with coverage, and packaging; it does not also run the standalone `just test` recipe.
+
+Clippy enables `all`, `pedantic`, and `nursery`, with all warnings treated as errors. `unwrap_used`, `expect_used`, `indexing_slicing`, and `panic` are denied. The exact settings in `clippy.toml` allow `expect` and indexing in tests but do not allow explicit panics there; production code must handle those operations safely. Cognitive complexity is limited to 10, arguments to 4, and function length to 80 lines. The sole group exception is `struct_excessive_bools`: independent TOML configuration switches intentionally remain booleans.
+
 ## GitHub Actions and releases
 
-[CI](https://github.com/l3r8yJ/mdspec/actions/workflows/ci.yml) runs on pull requests and pushes to `main`, with three sequential jobs: formatting/Clippy → tests → release build. Each job installs the version from `rust-toolchain.toml`; Cargo commands use the lockfile. The build smoke-tests the binary and uploads a Linux x86_64 archive and `SHA256SUMS` as a seven-day workflow artifact.
+[CI](https://github.com/l3r8yJ/mdspec/actions/workflows/ci.yml) runs on pull requests and pushes to `main`, with sequential jobs: **formatting → strict Clippy → tests/coverage → release build**. `needs` prevents later jobs from running after a failed prerequisite; concurrency cancels superseded runs for the same PR or branch. Each job installs the pinned tools and calls the same `just` recipes as local development. Tests run once with coverage instrumentation; the next step enforces the 70% threshold without rerunning them. CI uploads LCOV for seven days and the smoke-tested Linux x86_64 release bundle with `SHA256SUMS` for 90 days.
 
-[Release](https://github.com/l3r8yJ/mdspec/actions/workflows/release.yml) runs when a `v*` tag is pushed. It requires the tag to equal `v` plus the package version in `Cargo.toml`, runs the same CI workflow against the tagged commit, verifies the artifact checksums, and publishes a GitHub Release with generated notes. Versions containing a hyphen are marked as prereleases. Only the publication job receives write permission; no additional repository secrets are needed. Action dependencies are pinned to commit SHAs.
+[Release](https://github.com/l3r8yJ/mdspec/actions/workflows/release.yml) runs when a `v*` tag is pushed. It requires the tag to equal `v` plus the package version in `Cargo.toml`, then finds the push-to-`main` CI run for the **exact tagged commit**. It waits if that run is still in progress and stops if CI failed or no matching run exists. Publication downloads the successful run's existing artifact, verifies checksums, and creates a GitHub Release. It does **not** repeat linting, tests, or compilation and never accepts a pull-request artifact. Versions containing a hyphen are marked as prereleases. Only publication has write permission; actions are SHA-pinned and no extra secrets are required.
+
+Merge and let main CI start before tagging. If an artifact has expired or was deleted, rerun its main CI run before retrying the release. Tagging an unmerged branch or a commit with no main CI run intentionally fails.
 
 To release after merging the workflows, update the package version and lockfile through a PR, then tag the intended commit:
 

@@ -4,8 +4,18 @@ use std::path::{Path, PathBuf};
 
 use crate::config::Config;
 use crate::diagnostics::{Diagnostic, Severity};
-use crate::model::{BlockKind, Document, Position};
+use crate::model::{Block, BlockKind, Document, Position};
 use crate::parser;
+
+type TargetCache = HashMap<PathBuf, Result<HashSet<String>, String>>;
+
+struct Validation<'a> {
+    document: &'a Document,
+    path: &'a Path,
+    config: &'a Config,
+    cache: TargetCache,
+    diagnostics: Vec<Diagnostic>,
+}
 
 pub fn validate(
     document: &Document,
@@ -13,140 +23,235 @@ pub fn validate(
     config: &Config,
     strict: bool,
 ) -> Vec<Diagnostic> {
-    let mut diagnostics = Vec::new();
-    let mut cache = HashMap::new();
-    let used: HashSet<&str> = document
-        .links
-        .iter()
-        .filter_map(|link| link.key.as_deref())
-        .collect();
-    validate_placement(document, path, config, &mut diagnostics);
-    for link in &document.links {
-        match (&link.key, &link.url) {
-            (Some(key), None) => diagnostics.push(Diagnostic::error(
-                "MDS011",
-                path,
-                Some(link.position),
-                format!("Undefined reference identifier: {key}"),
-            )),
-            (None, Some(url)) => {
-                if config.references.require_reference_style && is_local(url) {
-                    diagnostics.push(Diagnostic::error(
-                        "MDS014",
-                        path,
-                        Some(link.position),
-                        "Local links must use reference-style syntax",
-                    ));
-                }
-                validate_target(
-                    url,
-                    link.position,
-                    document,
-                    path,
-                    config,
-                    &mut cache,
-                    &mut diagnostics,
-                );
-            }
-            _ => {}
-        }
-    }
-    for definition in &document.definitions {
-        if strict && !used.contains(definition.key.as_str()) {
-            let mut diagnostic = Diagnostic::error(
-                "MDS016",
-                path,
-                Some(definition.position),
-                "Reference definition is unused",
-            );
-            diagnostic.severity = Severity::Warning;
-            diagnostics.push(diagnostic);
-        }
-        validate_target(
-            &definition.url,
-            definition.position,
-            document,
-            path,
-            config,
-            &mut cache,
-            &mut diagnostics,
-        );
-    }
-    diagnostics
+    let mut validation = Validation {
+        document,
+        path,
+        config,
+        cache: HashMap::new(),
+        diagnostics: Vec::new(),
+    };
+    validation.placement();
+    validation.links();
+    validation.definitions(strict);
+    validation.diagnostics
 }
 
-fn validate_placement(
-    document: &Document,
-    path: &Path,
-    config: &Config,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
-    let references = document.blocks.iter().position(|block| {
-        matches!(block.kind, BlockKind::Heading(3)) && block.text.trim() == config.labels.references
-    });
-    if (!document.links.is_empty() || !document.definitions.is_empty()) && references.is_none() {
-        diagnostics.push(Diagnostic::error(
-            "MDS015",
-            path,
-            document
+impl Validation<'_> {
+    fn error(
+        &mut self,
+        rule: &'static str,
+        position: Option<Position>,
+        message: impl Into<String>,
+    ) {
+        self.diagnostics
+            .push(Diagnostic::error(rule, self.path, position, message));
+    }
+
+    fn links(&mut self) {
+        for link in &self.document.links {
+            match (&link.key, &link.url) {
+                (Some(key), None) => self.error(
+                    "MDS011",
+                    Some(link.position),
+                    format!("Undefined reference identifier: {key}"),
+                ),
+                (None, Some(url)) => {
+                    if self.config.references.require_reference_style && is_local(url) {
+                        self.error(
+                            "MDS014",
+                            Some(link.position),
+                            "Local links must use reference-style syntax",
+                        );
+                    }
+                    self.target(url, link.position);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn definitions(&mut self, strict: bool) {
+        let used: HashSet<&str> = self
+            .document
+            .links
+            .iter()
+            .filter_map(|link| link.key.as_deref())
+            .collect();
+        for definition in &self.document.definitions {
+            if strict && !used.contains(definition.key.as_str()) {
+                let mut diagnostic = Diagnostic::error(
+                    "MDS016",
+                    self.path,
+                    Some(definition.position),
+                    "Reference definition is unused",
+                );
+                diagnostic.severity = Severity::Warning;
+                self.diagnostics.push(diagnostic);
+            }
+            self.target(&definition.url, definition.position);
+        }
+    }
+
+    fn placement(&mut self) {
+        let references = self.document.blocks.iter().find(|block| {
+            matches!(block.kind, BlockKind::Heading(3))
+                && block.text.trim() == self.config.labels.references
+        });
+        if references.is_none()
+            && (!self.document.links.is_empty() || !self.document.definitions.is_empty())
+        {
+            let position = self
+                .document
                 .links
                 .first()
                 .map(|link| link.position)
                 .or_else(|| {
-                    document
+                    self.document
                         .definitions
                         .first()
                         .map(|definition| definition.position)
-                }),
-            format!(
-                "Documents with links must contain the {} section",
-                config.labels.references
-            ),
-        ));
-    }
-    if !config.references.definitions_at_end {
-        return;
-    }
-    for definition in &document.definitions {
-        let in_section = references.is_some_and(|index| {
-            document.blocks[index].position.offset < definition.position.offset
-                && !document.blocks[index + 1..].iter().any(|block| {
-                    matches!(block.kind, BlockKind::Heading(1..=3))
-                        && block.position.offset < definition.position.offset
-                })
-        });
-        let is_root_definition = document.blocks.iter().any(|block| {
-            matches!(block.kind, BlockKind::Definition)
-                && block.position.offset == definition.position.offset
-        });
-        let followed_by_content = document.blocks.iter().any(|block| {
-            block.position.offset > definition.position.offset
-                && !matches!(block.kind, BlockKind::Definition)
-        });
-        if !in_section || !is_root_definition || followed_by_content {
-            diagnostics.push(Diagnostic::error(
+                });
+            self.error(
                 "MDS015",
-                path,
-                Some(definition.position),
-                format!("Reference definitions must appear in the {} section at the end of the document", config.labels.references),
-            ));
+                position,
+                format!(
+                    "Documents with links must contain the {} section",
+                    self.config.labels.references
+                ),
+            );
         }
-    }
-    if let Some(index) = references {
-        for block in &document.blocks[index + 1..] {
-            if !matches!(block.kind, BlockKind::Definition) {
-                diagnostics.push(Diagnostic::error(
+        if !self.config.references.definitions_at_end {
+            return;
+        }
+        for definition in &self.document.definitions {
+            if !definition_is_terminal(self.document, definition.position.offset, references) {
+                self.error("MDS015", Some(definition.position), format!("Reference definitions must appear in the {} section at the end of the document", self.config.labels.references));
+            }
+        }
+        if let Some(references) = references {
+            for block in self.document.blocks.iter().filter(|block| {
+                block.position.offset > references.position.offset
+                    && !matches!(block.kind, BlockKind::Definition)
+            }) {
+                self.error(
                     "MDS015",
-                    path,
                     Some(block.position),
                     format!(
                         "Only reference definitions are allowed after the {} heading",
-                        config.labels.references
+                        self.config.labels.references
                     ),
-                ));
+                );
             }
         }
     }
+
+    fn target(&mut self, url: &str, position: Position) {
+        if !is_local(url)
+            || (!self.config.references.validate_local_paths
+                && !self.config.references.validate_anchors)
+        {
+            return;
+        }
+        let (resource, fragment) = url
+            .split_once('#')
+            .map_or((url, None), |(resource, fragment)| {
+                (resource, Some(fragment))
+            });
+        let raw_path = resource
+            .split_once('?')
+            .map_or(resource, |(resource, _)| resource);
+        let Some(decoded_path) = percent_decode(raw_path) else {
+            self.error(
+                "MDS012",
+                Some(position),
+                "Invalid percent encoding in local path",
+            );
+            return;
+        };
+        let same_file = decoded_path.is_empty();
+        let target = if same_file {
+            self.path.to_path_buf()
+        } else {
+            self.path
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join(&decoded_path)
+        };
+        if self.config.references.validate_local_paths
+            && !same_file
+            && let Err(error) = check_file(&target)
+        {
+            self.error("MDS012", Some(position), error);
+            return;
+        }
+        if same_file
+            || target
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("md"))
+        {
+            self.fragment(&target, fragment, position);
+        }
+    }
+
+    fn fragment(&mut self, target: &Path, fragment: Option<&str>, position: Position) {
+        let Some(fragment) = fragment.filter(|fragment| !fragment.is_empty()) else {
+            return;
+        };
+        if !self.config.references.validate_anchors {
+            return;
+        }
+        let Some(fragment) = percent_decode(fragment) else {
+            self.error(
+                "MDS013",
+                Some(position),
+                "Invalid percent encoding in link fragment",
+            );
+            return;
+        };
+        let target_anchors = if target == self.path {
+            Ok(anchors(self.document))
+        } else {
+            target_anchors(target, &mut self.cache)
+        };
+        match target_anchors {
+            Ok(anchors) if !anchors.contains(&fragment) => self.error(
+                "MDS013",
+                Some(position),
+                format!("Anchor #{fragment} not found in {}", target.display()),
+            ),
+            Err(error) => self.error("MDS012", Some(position), error),
+            _ => {}
+        }
+    }
+}
+
+fn definition_is_terminal(document: &Document, offset: usize, references: Option<&Block>) -> bool {
+    let Some(references) = references.filter(|section| section.position.offset < offset) else {
+        return false;
+    };
+    let root_definition = document.blocks.iter().any(|block| {
+        matches!(block.kind, BlockKind::Definition) && block.position.offset == offset
+    });
+    let intervening_section = document.blocks.iter().any(|block| {
+        matches!(block.kind, BlockKind::Heading(1..=3))
+            && block.position.offset > references.position.offset
+            && block.position.offset < offset
+    });
+    let subsequent_content = document.blocks.iter().any(|block| {
+        block.position.offset > offset && !matches!(block.kind, BlockKind::Definition)
+    });
+    root_definition && !intervening_section && !subsequent_content
+}
+
+fn check_file(target: &Path) -> Result<(), String> {
+    let metadata = fs::metadata(target)
+        .map_err(|error| format!("Target file not found {}: {error}", target.display()))?;
+    if !metadata.is_file() {
+        return Err(format!("Link target is not a file: {}", target.display()));
+    }
+    fs::File::open(target)
+        .map_err(|error| format!("Unable to open {}: {error}", target.display()))?;
+    Ok(())
 }
 
 fn is_local(url: &str) -> bool {
@@ -167,9 +272,9 @@ fn percent_decode(value: &str) -> Option<String> {
     let mut bytes = value.bytes();
     while let Some(byte) = bytes.next() {
         if byte == b'%' {
-            let high = char::from(bytes.next()?).to_digit(16)?;
-            let low = char::from(bytes.next()?).to_digit(16)?;
-            decoded.push((high * 16 + low) as u8);
+            let high = u8::try_from(char::from(bytes.next()?).to_digit(16)?).ok()?;
+            let low = u8::try_from(char::from(bytes.next()?).to_digit(16)?).ok()?;
+            decoded.push(high * 16 + low);
         } else {
             decoded.push(byte);
         }
@@ -206,8 +311,6 @@ fn anchors(document: &Document) -> HashSet<String> {
     anchors
 }
 
-type TargetCache = HashMap<PathBuf, Result<HashSet<String>, String>>;
-
 fn target_anchors(target: &Path, cache: &mut TargetCache) -> Result<HashSet<String>, String> {
     cache
         .entry(target.to_path_buf())
@@ -217,112 +320,4 @@ fn target_anchors(target: &Path, cache: &mut TargetCache) -> Result<HashSet<Stri
             Ok(anchors(&parser::parse(&source)))
         })
         .clone()
-}
-
-fn validate_target(
-    url: &str,
-    position: Position,
-    document: &Document,
-    path: &Path,
-    config: &Config,
-    cache: &mut TargetCache,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
-    if !is_local(url)
-        || (!config.references.validate_local_paths && !config.references.validate_anchors)
-    {
-        return;
-    }
-    let (resource, fragment) = url
-        .split_once('#')
-        .map_or((url, None), |(resource, fragment)| {
-            (resource, Some(fragment))
-        });
-    let raw_path = resource
-        .split_once('?')
-        .map_or(resource, |(resource, _)| resource);
-    let Some(decoded_path) = percent_decode(raw_path) else {
-        diagnostics.push(Diagnostic::error(
-            "MDS012",
-            path,
-            Some(position),
-            "Invalid percent encoding in local path",
-        ));
-        return;
-    };
-    let target = if decoded_path.is_empty() {
-        path.to_path_buf()
-    } else {
-        path.parent()
-            .unwrap_or_else(|| Path::new("."))
-            .join(&decoded_path)
-    };
-    if config.references.validate_local_paths && !decoded_path.is_empty() {
-        match fs::metadata(&target) {
-            Ok(metadata) if metadata.is_file() => {
-                if let Err(error) = fs::File::open(&target) {
-                    diagnostics.push(Diagnostic::error(
-                        "MDS012",
-                        path,
-                        Some(position),
-                        format!("Unable to open {}: {error}", target.display()),
-                    ));
-                    return;
-                }
-            }
-            Ok(_) => {
-                diagnostics.push(Diagnostic::error(
-                    "MDS012",
-                    path,
-                    Some(position),
-                    format!("Link target is not a file: {}", target.display()),
-                ));
-                return;
-            }
-            Err(error) => {
-                diagnostics.push(Diagnostic::error(
-                    "MDS012",
-                    path,
-                    Some(position),
-                    format!("Target file not found {}: {error}", target.display()),
-                ));
-                return;
-            }
-        }
-    }
-    let Some(fragment) = fragment.filter(|fragment| !fragment.is_empty()) else {
-        return;
-    };
-    if !config.references.validate_anchors
-        || (!decoded_path.is_empty()
-            && !target
-                .extension()
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("md")))
-    {
-        return;
-    }
-    let Some(fragment) = percent_decode(fragment) else {
-        diagnostics.push(Diagnostic::error(
-            "MDS013",
-            path,
-            Some(position),
-            "Invalid percent encoding in link fragment",
-        ));
-        return;
-    };
-    let target_anchors = if decoded_path.is_empty() {
-        Ok(anchors(document))
-    } else {
-        target_anchors(&target, cache)
-    };
-    match target_anchors {
-        Ok(anchors) if !anchors.contains(&fragment) => diagnostics.push(Diagnostic::error(
-            "MDS013",
-            path,
-            Some(position),
-            format!("Anchor #{fragment} not found in {}", target.display()),
-        )),
-        Err(error) => diagnostics.push(Diagnostic::error("MDS012", path, Some(position), error)),
-        _ => {}
-    }
 }

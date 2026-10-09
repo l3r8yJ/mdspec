@@ -23,165 +23,28 @@ pub fn parse(source: &str) -> Document {
         .iter()
         .map(|(_, definition)| definition.span.clone())
         .collect();
-    let mut document = Document {
+    let document = Document {
         blocks: Vec::new(),
         definitions,
         links: Vec::new(),
         headings: Vec::new(),
         nested_headings: Vec::new(),
     };
+    let mut state = ParseState {
+        document,
+        positions,
+        depth: 0,
+        heading: None,
+        table_rows: Vec::new(),
+        cell: None,
+        in_html_comment: false,
+    };
     let mut events = parser.into_offset_iter();
-    let mut depth = 0_usize;
-    let mut heading: Option<(String, Position)> = None;
-    let mut table_rows: Vec<Vec<String>> = Vec::new();
-    let mut cell: Option<String> = None;
-    let mut in_html_comment = false;
     while let Some((event, span)) = events.next() {
-        let start = positions.at(span.start);
-        match event {
-            Event::Start(tag) => {
-                if depth == 0 {
-                    let kind = match &tag {
-                        Tag::Heading { level, .. } => BlockKind::Heading(*level as u8),
-                        Tag::Table(_) => BlockKind::Table(Vec::new()),
-                        Tag::Paragraph => BlockKind::Paragraph,
-                        _ => BlockKind::Content,
-                    };
-                    document.blocks.push(Block {
-                        kind,
-                        position: start,
-                        end: span.end,
-                        text: String::new(),
-                    });
-                }
-                match tag {
-                    Tag::Heading { .. } => {
-                        heading = Some((String::new(), start));
-                        if depth > 0 {
-                            document.nested_headings.push(start);
-                        }
-                    }
-                    Tag::Table(_) => table_rows.clear(),
-                    Tag::TableHead | Tag::TableRow => table_rows.push(Vec::new()),
-                    Tag::TableCell => cell = Some(String::new()),
-                    Tag::Link {
-                        link_type,
-                        dest_url,
-                        id,
-                        ..
-                    }
-                    | Tag::Image {
-                        link_type,
-                        dest_url,
-                        id,
-                        ..
-                    } => {
-                        let unknown = matches!(
-                            link_type,
-                            LinkType::ReferenceUnknown
-                                | LinkType::CollapsedUnknown
-                                | LinkType::ShortcutUnknown
-                        );
-                        let reference = matches!(
-                            link_type,
-                            LinkType::Reference | LinkType::Collapsed | LinkType::Shortcut
-                        ) || unknown;
-                        let key = reference.then(|| {
-                            events.reference_definitions().get(&id).map_or_else(
-                                || id.to_string(),
-                                |definition| definition.span.start.to_string(),
-                            )
-                        });
-                        document.links.push(Link {
-                            key,
-                            url: (!unknown).then(|| dest_url.to_string()),
-                            position: start,
-                        });
-                    }
-                    _ => {}
-                }
-                depth += 1;
-            }
-            Event::End(tag) => {
-                depth = depth.saturating_sub(1);
-                match tag {
-                    TagEnd::Heading(_) => {
-                        if let Some(value) = heading.take() {
-                            document.headings.push(value);
-                        }
-                    }
-                    TagEnd::TableCell => {
-                        if let (Some(row), Some(value)) = (table_rows.last_mut(), cell.take()) {
-                            row.push(value);
-                        }
-                    }
-                    TagEnd::Table if depth == 0 => {
-                        if let Some(block) = document.blocks.last_mut() {
-                            block.kind = BlockKind::Table(std::mem::take(&mut table_rows));
-                        }
-                    }
-                    TagEnd::Paragraph | TagEnd::Item => {
-                        if let Some(block) = document.blocks.last_mut() {
-                            block.text.push('\n');
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            Event::Html(ref text) | Event::InlineHtml(ref text)
-                if in_html_comment || text.trim().starts_with("<!--") =>
-            {
-                in_html_comment = !text.contains("-->");
-            }
-            Event::InlineHtml(text) => {
-                if heading.is_none()
-                    && let Some(block) = document.blocks.last_mut()
-                {
-                    block.text.push_str(&text);
-                }
-            }
-            Event::Text(text)
-            | Event::Code(text)
-            | Event::Html(text)
-            | Event::InlineMath(text)
-            | Event::DisplayMath(text) => {
-                if depth == 0 {
-                    document.blocks.push(Block {
-                        kind: BlockKind::Content,
-                        position: start,
-                        end: span.end,
-                        text: text.to_string(),
-                    });
-                } else if let Some(block) = document.blocks.last_mut() {
-                    block.text.push_str(&text);
-                }
-                if let Some((value, _)) = &mut heading {
-                    value.push_str(&text);
-                }
-                if let Some(value) = &mut cell {
-                    value.push_str(&text);
-                }
-            }
-            Event::SoftBreak | Event::HardBreak => {
-                if let Some(block) = document.blocks.last_mut() {
-                    block.text.push('\n');
-                }
-                if let Some((value, _)) = &mut heading {
-                    value.push(' ');
-                }
-                if let Some(value) = &mut cell {
-                    value.push(' ');
-                }
-            }
-            Event::Rule if depth == 0 => document.blocks.push(Block {
-                kind: BlockKind::Content,
-                position: start,
-                end: span.end,
-                text: String::new(),
-            }),
-            _ => {}
-        }
+        state.event(event, span, events.reference_definitions());
     }
+    let mut document = state.document;
+    let positions = state.positions;
     for span in definition_ranges {
         if !document
             .blocks
@@ -198,6 +61,183 @@ pub fn parse(source: &str) -> Document {
     }
     document.blocks.sort_by_key(|block| block.position.offset);
     document
+}
+
+struct ParseState<'a> {
+    document: Document,
+    positions: SourcePositions<'a>,
+    depth: usize,
+    heading: Option<(String, Position)>,
+    table_rows: Vec<Vec<String>>,
+    cell: Option<String>,
+    in_html_comment: bool,
+}
+
+impl ParseState<'_> {
+    fn event(
+        &mut self,
+        event: Event<'_>,
+        span: std::ops::Range<usize>,
+        definitions: &pulldown_cmark::RefDefs<'_>,
+    ) {
+        let start = self.positions.at(span.start);
+        match event {
+            Event::Start(tag) => self.start(tag, span, definitions),
+            Event::End(tag) => self.end(tag),
+            Event::Html(ref text) | Event::InlineHtml(ref text)
+                if self.in_html_comment || text.trim().starts_with("<!--") =>
+            {
+                self.in_html_comment = !text.contains("-->");
+            }
+            Event::InlineHtml(text) => {
+                if self.heading.is_none()
+                    && let Some(block) = self.document.blocks.last_mut()
+                {
+                    block.text.push_str(&text);
+                }
+            }
+            Event::Text(text)
+            | Event::Code(text)
+            | Event::Html(text)
+            | Event::InlineMath(text)
+            | Event::DisplayMath(text) => {
+                if self.depth == 0 {
+                    self.document.blocks.push(Block {
+                        kind: BlockKind::Content,
+                        position: start,
+                        end: span.end,
+                        text: text.to_string(),
+                    });
+                } else if let Some(block) = self.document.blocks.last_mut() {
+                    block.text.push_str(&text);
+                }
+                if let Some((value, _)) = &mut self.heading {
+                    value.push_str(&text);
+                }
+                if let Some(value) = &mut self.cell {
+                    value.push_str(&text);
+                }
+            }
+            Event::SoftBreak | Event::HardBreak => self.line_break(),
+            Event::Rule if self.depth == 0 => self.document.blocks.push(Block {
+                kind: BlockKind::Content,
+                position: start,
+                end: span.end,
+                text: String::new(),
+            }),
+            _ => {}
+        }
+    }
+
+    fn line_break(&mut self) {
+        if let Some(block) = self.document.blocks.last_mut() {
+            block.text.push('\n');
+        }
+        if let Some((value, _)) = &mut self.heading {
+            value.push(' ');
+        }
+        if let Some(value) = &mut self.cell {
+            value.push(' ');
+        }
+    }
+
+    fn start(
+        &mut self,
+        tag: Tag<'_>,
+        span: std::ops::Range<usize>,
+        definitions: &pulldown_cmark::RefDefs<'_>,
+    ) {
+        let start = self.positions.at(span.start);
+
+        if self.depth == 0 {
+            let kind = match &tag {
+                Tag::Heading { level, .. } => BlockKind::Heading(*level as u8),
+                Tag::Table(_) => BlockKind::Table(Vec::new()),
+                Tag::Paragraph => BlockKind::Paragraph,
+                _ => BlockKind::Content,
+            };
+            self.document.blocks.push(Block {
+                kind,
+                position: start,
+                end: span.end,
+                text: String::new(),
+            });
+        }
+        match tag {
+            Tag::Heading { .. } => {
+                self.heading = Some((String::new(), start));
+                if self.depth > 0 {
+                    self.document.nested_headings.push(start);
+                }
+            }
+            Tag::Table(_) => self.table_rows.clear(),
+            Tag::TableHead | Tag::TableRow => self.table_rows.push(Vec::new()),
+            Tag::TableCell => self.cell = Some(String::new()),
+            Tag::Link {
+                link_type,
+                dest_url,
+                id,
+                ..
+            }
+            | Tag::Image {
+                link_type,
+                dest_url,
+                id,
+                ..
+            } => {
+                let unknown = matches!(
+                    link_type,
+                    LinkType::ReferenceUnknown
+                        | LinkType::CollapsedUnknown
+                        | LinkType::ShortcutUnknown
+                );
+                let reference = matches!(
+                    link_type,
+                    LinkType::Reference | LinkType::Collapsed | LinkType::Shortcut
+                ) || unknown;
+                let key = reference.then(|| {
+                    definitions.get(&id).map_or_else(
+                        || id.to_string(),
+                        |definition| definition.span.start.to_string(),
+                    )
+                });
+                self.document.links.push(Link {
+                    key,
+                    url: (!unknown).then(|| dest_url.to_string()),
+                    position: start,
+                });
+            }
+            _ => {}
+        }
+        self.depth += 1;
+    }
+
+    fn end(&mut self, tag: TagEnd) {
+        self.depth = self.depth.saturating_sub(1);
+        match tag {
+            TagEnd::Heading(_) => {
+                if let Some(value) = self.heading.take() {
+                    self.document.headings.push(value);
+                }
+            }
+            TagEnd::TableCell => {
+                if let (Some(row), Some(value)) = (self.table_rows.last_mut(), self.cell.take()) {
+                    row.push(value);
+                }
+            }
+            TagEnd::Table if self.depth == 0 => {
+                if let Some(block) = self.document.blocks.last_mut() {
+                    block.kind = BlockKind::Table(std::mem::take(&mut self.table_rows));
+                }
+            }
+            TagEnd::Paragraph | TagEnd::Item => {
+                if let Some(block) = self.document.blocks.last_mut() {
+                    block.text.push('\n');
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 struct SourcePositions<'a> {
@@ -222,10 +262,16 @@ impl<'a> SourcePositions<'a> {
 
     fn at(&self, offset: usize) -> Position {
         let line = self.line_starts.partition_point(|start| *start <= offset);
-        let line_start = self.line_starts[line - 1];
+        let line_start = self.line_starts.get(line - 1).copied().unwrap_or_default();
         Position {
             line,
-            column: self.source[line_start..offset].chars().count() + 1,
+            column: self
+                .source
+                .get(line_start..offset)
+                .unwrap_or_default()
+                .chars()
+                .count()
+                + 1,
             offset,
         }
     }

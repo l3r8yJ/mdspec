@@ -44,10 +44,8 @@ impl Report {
             .any(|item| matches!(item.rule, "MDS900" | "MDS901" | "MDS902"))
         {
             2
-        } else if self.error_count > 0 {
-            1
         } else {
-            0
+            u8::from(self.error_count > 0)
         }
     }
 }
