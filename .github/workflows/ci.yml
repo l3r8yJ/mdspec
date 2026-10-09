@@ -72,7 +72,7 @@ jobs:
           tool: just@1.58.0,cargo-llvm-cov@0.9.1
       - name: Run tests once with coverage instrumentation
         run: just test-coverage
-      - name: Enforce 70 percent line coverage
+      - name: Enforce 90 percent line coverage
         run: just coverage-check
       - name: Upload coverage report
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

@@ -276,7 +276,7 @@ just ci
 
 Tests drive real CLI processes and fixtures, covering valid and invalid documents, multiple simultaneous violations, Unicode, code blocks, cross-file references, custom English/Japanese labels, strict/config behavior, invalid UTF-8, output formats, exit codes, and directory traversal.
 
-`just coverage` runs the tests once with LLVM instrumentation, then fails if total line coverage is below **70%**. Integration-test sources and dependencies are excluded by cargo-llvm-cov's default filters. CLI subprocesses contribute coverage. `target/coverage/lcov.info` contains the report. `just ci` runs formatting, strict linting, tests with coverage, binary packaging, and a crates.io publication dry run; it does not also run the standalone `just test` recipe. `just publish-check` builds the packaged source to verify that it is self-contained, without uploading it.
+`just coverage` runs the tests once with LLVM instrumentation, then fails if total line coverage is below **90%**. Integration-test sources and dependencies are excluded by cargo-llvm-cov's default filters. CLI subprocesses contribute coverage. `target/coverage/lcov.info` contains the report. `just ci` runs formatting, strict linting, tests with coverage, binary packaging, and a crates.io publication dry run; it does not also run the standalone `just test` recipe. `just publish-check` builds the packaged source to verify that it is self-contained, without uploading it.
 
 Clippy enables `all`, `pedantic`, and `nursery`, with all warnings treated as errors. `unwrap_used`, `expect_used`, `indexing_slicing`, and `panic` are denied. The exact settings in `clippy.toml` allow `expect` and indexing in tests but do not allow explicit panics there; production code must handle those operations safely. Cognitive complexity is limited to 10, arguments to 4, and function length to 80 lines. The sole group exception is `struct_excessive_bools`: independent TOML configuration switches intentionally remain booleans.
 
@@ -292,7 +292,7 @@ Clippy enables `all`, `pedantic`, and `nursery`, with all warnings treated as er
 
 Configure features, file/function filters, and test timeout settings in `.cargo/mutants.toml`. Mutation runs cap compiler lint severity so generated warnings do not prevent testing; normal builds and Clippy still deny warnings.
 
-The **Mutation testing** GitHub workflow runs manually or every Monday at 04:00 UTC and retains reports for 14 days. Review missed mutations before adding tests: some changes preserve behavior. There is no configured mutation-score percentage gate; the 70% threshold applies only to line coverage.
+The **Mutation testing** GitHub workflow runs manually or every Monday at 04:00 UTC and retains reports for 14 days. Review missed mutations before adding tests: some changes preserve behavior. There is no configured mutation-score percentage gate; the 90% threshold applies only to line coverage.
 
 ## Limits
 

@@ -24,7 +24,7 @@ test-coverage:
     cargo llvm-cov --locked --all-features --no-report
 
 coverage-check:
-    cargo llvm-cov report --summary-only --fail-under-lines 70
+    cargo llvm-cov report --summary-only --fail-under-lines 90
     mkdir -p target/coverage
     cargo llvm-cov report --lcov --output-path target/coverage/lcov.info
 
