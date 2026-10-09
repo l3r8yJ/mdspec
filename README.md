@@ -293,6 +293,8 @@ Clippy enables `all`, `pedantic`, and `nursery`, with all warnings treated as er
 - Gate: missed mutations or timeouts fail the command. Unbuildable mutations are reported separately.
 - Limits: two workers, 300 seconds per build, and a test timeout of five times baseline duration with a 20-second minimum.
 
+To use four mutation workers, run `env CARGO_MUTANTS_JOBS=4 just full`. More workers use more CPU, memory, and temporary disk space; measure before increasing further. The default remains two.
+
 Configure features, file/function filters, and test timeout settings in `.cargo/mutants.toml`. Mutation runs cap compiler lint severity so generated warnings do not prevent testing; normal builds and Clippy still deny warnings.
 
 The **Mutation testing** GitHub workflow runs manually or every Monday at 04:00 UTC and retains reports for 14 days. Review missed mutations before adding tests: some changes preserve behavior. There is no configured mutation-score percentage gate; the 90% threshold applies only to line coverage.
