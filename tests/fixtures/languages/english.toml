@@ -1,0 +1,10 @@
+[labels]
+endpoint_prefix = "Endpoint:"
+path_prefix = "Route:"
+logic = "Workflow"
+components = "Building blocks"
+mappings = "Transformations"
+references = "Resources"
+description = "Details"
+source = "From"
+target = "To"

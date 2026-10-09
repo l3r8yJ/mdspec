@@ -1,0 +1,10 @@
+[labels]
+endpoint_prefix = "エンドポイント："
+path_prefix = "経路："
+logic = "処理"
+components = "部品"
+mappings = "変換"
+references = "参照"
+description = "説明"
+source = "入力"
+target = "出力"

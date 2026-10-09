@@ -1,0 +1,27 @@
+[document]
+require_endpoint = true
+require_logic = true
+require_components = false
+require_mappings = false
+enforce_section_order = true
+allow_unknown_sections = true
+
+[references]
+require_reference_style = true
+definitions_at_end = true
+validate_local_paths = true
+validate_anchors = true
+
+[diagnostics]
+warnings_as_errors = false
+
+[labels]
+endpoint_prefix = "Эндпоинт:"
+path_prefix = "Path:"
+logic = "Логика работы"
+components = "Компоненты"
+mappings = "Маппинги"
+references = "Ссылки"
+description = "Описание"
+source = "Source"
+target = "Target"
