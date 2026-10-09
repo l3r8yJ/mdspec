@@ -85,24 +85,110 @@ See the full default configuration in [mdspec.toml](mdspec.toml).
 
 Examples use the English labels above and show fragments of an otherwise valid document. `→` means “followed by”.
 
-| Rule | Correct example | Incorrect example |
-|---|---|---|
-| MDS001 — Endpoint heading | `## Endpoint: List items` | `## List items` |
-| MDS002 — HTTP path | `Path: GET /items` immediately after H2 | `Path: FETCH /items` |
-| MDS003 — Required sections | `### Logic` present | No logic section |
-| MDS004 — Section order and uniqueness | Logic → Components → Mappings → References | Mappings → Logic, or two Logic sections |
-| MDS005 — Heading levels | `#### Check` → `##### Description` | `#### Check` → `###### Description` |
-| MDS006 — Known sections (when enforced) | `### Components` | `### Extra` |
-| MDS007 — Nonempty sections | `### Logic` → `1. Return items.` | `### Logic` → next H3 |
-| MDS008 — Component description | `#### Check` → `##### Description` → `Check access.` | Description missing or empty |
-| MDS009 — Unique component names | `#### Check` → `#### Fetch` | Two `#### Check` headings |
-| MDS010 — Mapping table under H4 | `Source \| Target`<br>`--- \| ---`<br>`id \| itemId` | No table, missing column, or empty required cell |
-| MDS011 — Defined reference keys | `[items][key]` with `[key]: items.md` | `[items][missing]` without a definition |
-| MDS012 — Existing local file | `[key]: items.md` where the file exists | `[key]: missing.md` |
-| MDS013 — Existing anchor | `[key]: items.md#check` with `## Check` in the target | `[key]: items.md#missing` |
-| MDS014 — Reference-style local links | `[items][key]` with a definition | `[items](items.md)` |
-| MDS015 — Definitions at the end | Final `### References` → definitions only | Definition before Logic |
-| MDS016 — Used definitions (strict mode) | `[key]` plus its definition | Definition with no usage |
+### MDS001 — Endpoint heading
+
+Correct: `## Endpoint: List items`
+
+Incorrect: `## List items`
+
+### MDS002 — HTTP path
+
+Correct: `Path: GET /items` immediately after H2
+
+Incorrect: `Path: FETCH /items`
+
+### MDS003 — Required sections
+
+Correct: `### Logic` present
+
+Incorrect: No logic section
+
+### MDS004 — Section order and uniqueness
+
+Correct: Logic → Components → Mappings → References
+
+Incorrect: Mappings → Logic, or two Logic sections
+
+### MDS005 — Heading levels
+
+Correct: `#### Check` → `##### Description`
+
+Incorrect: `#### Check` → `###### Description`
+
+### MDS006 — Known sections (when enforced)
+
+Correct: `### Components`
+
+Incorrect: `### Extra`
+
+### MDS007 — Nonempty sections
+
+Correct: `### Logic` → `1. Return items.`
+
+Incorrect: `### Logic` → next H3
+
+### MDS008 — Component description
+
+Correct: `#### Check` → `##### Description` → `Check access.`
+
+Incorrect: Description missing or empty
+
+### MDS009 — Unique component names
+
+Correct: `#### Check` → `#### Fetch`
+
+Incorrect: Two `#### Check` headings
+
+### MDS010 — Mapping table under H4
+
+Correct:
+
+```md
+#### Item mapping
+
+| Source | Target |
+| --- | --- |
+| id | itemId |
+```
+
+Incorrect: No table, missing column, or empty required cell
+
+### MDS011 — Defined reference keys
+
+Correct: `[items][key]` with `[key]: items.md`
+
+Incorrect: `[items][missing]` without a definition
+
+### MDS012 — Existing local file
+
+Correct: `[key]: items.md` where the file exists
+
+Incorrect: `[key]: missing.md`
+
+### MDS013 — Existing anchor
+
+Correct: `[key]: items.md#check` with `## Check` in the target
+
+Incorrect: `[key]: items.md#missing`
+
+### MDS014 — Reference-style local links
+
+Correct: `[items][key]` with a definition
+
+Incorrect: `[items](items.md)`
+
+### MDS015 — Definitions at the end
+
+Correct: Final `### References` → definitions only
+
+Incorrect: Definition before Logic
+
+### MDS016 — Used definitions (strict mode)
+
+Correct: `[key]` plus its definition
+
+Incorrect: Definition with no usage
+
 
 MDS001–MDS015 are errors. MDS016 is enabled by `--strict` and is promoted to an error. Configuration can relax selected rules; see below.
 
