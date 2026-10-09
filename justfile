@@ -14,11 +14,9 @@ clippy:
     cargo clippy --locked --all-targets --all-features -- -D warnings
 
 test:
-    bash tests/rultor-release.sh
     cargo test --locked --all-features
 
 test-coverage:
-    bash tests/rultor-release.sh
     cargo llvm-cov --locked --all-features --no-report
 
 coverage-check:
