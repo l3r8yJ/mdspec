@@ -139,6 +139,23 @@ cargo build --release
 
 Tests drive real CLI processes and fixtures, covering valid and invalid documents, multiple simultaneous violations, Unicode, code blocks, cross-file references, custom English/Japanese labels, strict/config behavior, invalid UTF-8, output formats, exit codes, and directory traversal.
 
+## GitHub Actions and releases
+
+[CI](https://github.com/l3r8yJ/mdspec/actions/workflows/ci.yml) runs on pull requests and pushes to `main`, with three sequential jobs: formatting/Clippy → tests → release build. Each job installs the version from `rust-toolchain.toml`; Cargo commands use the lockfile. The build smoke-tests the binary and uploads a Linux x86_64 archive and `SHA256SUMS` as a seven-day workflow artifact.
+
+[Release](https://github.com/l3r8yJ/mdspec/actions/workflows/release.yml) runs when a `v*` tag is pushed. It requires the tag to equal `v` plus the package version in `Cargo.toml`, runs the same CI workflow against the tagged commit, verifies the artifact checksums, and publishes a GitHub Release with generated notes. Versions containing a hyphen are marked as prereleases. Only the publication job receives write permission; no additional repository secrets are needed. Action dependencies are pinned to commit SHAs.
+
+To release after merging the workflows, update the package version and lockfile through a PR, then tag the intended commit:
+
+```sh
+git switch main
+git pull --ff-only
+git tag -a v0.1.0 -m "Release v0.1.0"
+git push origin v0.1.0
+```
+
+Replace `0.1.0` with the actual package version. Tag publication creates a public release automatically; tags are not created by CI. Archives contain `mdspec` and are built on Ubuntu 24.04 for `x86_64-unknown-linux-gnu`, so they require a compatible Linux/glibc environment. macOS, Windows, and static-musl distributions are not built yet. Verify a downloaded archive with `sha256sum --check SHA256SUMS` from the directory containing both files.
+
 ## Limits
 
 CommonMark accepts almost any text; an unclosed code fence is not itself a syntax error. Schema violations are still checked. Repeated reference definitions use CommonMark first-wins without a separate duplicate diagnostic. YAML front matter, wiki links, footnotes, explicit HTML anchors, autofixes, plugins, and watch mode are outside the MVP. A single run uses one label configuration for all input documents; mixed structural vocabularies require separate runs.
