@@ -513,6 +513,7 @@ version = "0.1.0"
 dependencies = [
  "asserting",
  "clap",
+ "globset",
  "ignore",
  "pulldown-cmark",
  "serde",
