@@ -1,5 +1,8 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
+targets := "x86_64-unknown-linux-gnu x86_64-unknown-linux-musl"
+static_target := "x86_64-unknown-linux-musl"
+
 default:
     @just --list
 
@@ -34,7 +37,7 @@ coverage-check:
 coverage: test-coverage coverage-check
 
 build:
-    cargo build --locked --release
+    for target in {{ targets }}; do cargo build --locked --release --target "$target"; done
 
 publish-check:
     cargo publish --locked --dry-run
@@ -43,14 +46,16 @@ publish:
     cargo publish --locked --no-verify
 
 smoke: build
-    ./target/release/mdspec check tests/fixtures/languages/english.md --config tests/fixtures/languages/english.toml --strict
+    for target in {{ targets }}; do "target/$target/release/mdspec" check tests/fixtures/languages/english.md --config tests/fixtures/languages/english.toml --strict; done
+    file target/{{ static_target }}/release/mdspec | grep -E 'static-pie linked|statically linked'
+    docker run --rm -v "$PWD/target/{{ static_target }}/release/mdspec:/mdspec:ro" alpine:3 /mdspec --version
 
 package: smoke
     #!/usr/bin/env bash
     set -euo pipefail
     version=$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "mdspec") | .version')
     mkdir -p dist
-    tar -czf "dist/mdspec-${version}-x86_64-unknown-linux-gnu.tar.gz" -C target/release mdspec
+    for target in {{ targets }}; do tar -czf "dist/mdspec-${version}-${target}.tar.gz" -C "target/${target}/release" mdspec; done
     cd dist
     sha256sum ./*.tar.gz > SHA256SUMS
     sha256sum --check SHA256SUMS

@@ -8,7 +8,7 @@ Validates Markdown endpoint documentation: structure, components, mapping tables
 cargo install mdspec --locked
 ```
 
-Prebuilt Linux binaries are on [GitHub Releases](https://github.com/l3r8yJ/mdspec/releases).
+Prebuilt x86_64 Linux binaries are on [GitHub Releases](https://github.com/l3r8yJ/mdspec/releases). The `x86_64-unknown-linux-gnu` archive needs glibc; the statically linked `x86_64-unknown-linux-musl` archive also runs on Alpine and other images without glibc.
 
 ## Quick start
 
