@@ -75,6 +75,7 @@ Only a file passed with `--config` is read. Unknown keys are errors. All keys an
 
 - `document.require_endpoint = false` allows documents without the endpoint heading and path.
 - `document.allow_unknown_sections = false` rejects sections not listed in `[labels]`.
+- `document.multiple_endpoints = false` allows exactly one endpoint per document. By default every `## <endpoint_prefix> name` heading starts an endpoint that runs to the next H2. Section and component rules apply per endpoint. An optional H1 title and other H2 sections such as general rules are not checked. Link definitions go in each endpoint's references section or in one H2 references section at the end of the document.
 - `references.require_reference_style = false` allows inline local links.
 - `references.definitions_at_end = false` allows definitions anywhere.
 

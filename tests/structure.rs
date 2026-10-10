@@ -34,14 +34,8 @@ fn accepts_document_without_optional_sections() {
 }
 
 #[test]
-fn reports_missing_endpoint_path_and_logic_together() {
-    let (status, rules) = report("empty");
-    assert_that!(status).is_equal_to(1);
-    assert_that!(rules).contains_all_of([
-        "MDS001".to_owned(),
-        "MDS002".to_owned(),
-        "MDS003".to_owned(),
-    ]);
+fn reports_only_the_missing_endpoint_in_an_empty_document() {
+    assert_that!(report("empty")).is_equal_to((1, vec!["MDS001".to_owned()]));
 }
 
 #[test]

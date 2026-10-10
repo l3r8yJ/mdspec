@@ -5,6 +5,7 @@ require_components = false
 require_mappings = false
 enforce_section_order = true
 allow_unknown_sections = true
+multiple_endpoints = true
 
 [references]
 require_reference_style = true
