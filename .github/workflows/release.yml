@@ -21,11 +21,10 @@ jobs:
     name: Validate tag and reuse CI
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    outputs:
-      run-id: ${{ steps.ci.outputs.run-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          fetch-depth: 2
           persist-credentials: false
       - name: Install pinned Rust toolchain
         run: rustup show active-toolchain
@@ -37,40 +36,45 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: just verify-tag
-      - name: Find and await CI for the exact tagged main commit
-        id: ci
+      - name: Require the tag to only bump the version
+        run: |
+          changed=$(git diff --name-only HEAD^ HEAD | sort | paste -sd ' ')
+          if [[ "$changed" != 'Cargo.lock Cargo.toml' ]]; then
+            echo "The release commit must change only Cargo.toml and Cargo.lock, got: $changed" >&2
+            exit 1
+          fi
+      - name: Find and await CI for the released main commit
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          commit_sha=$(git rev-parse HEAD)
+          commit_sha=$(git rev-parse HEAD^)
           run_id=$(gh run list --workflow ci.yml --commit "$commit_sha" --branch main --event push --limit 1 --json databaseId --jq '.[0].databaseId // empty')
           if [[ -z "$run_id" ]]; then
             echo 'No main-branch push CI run exists for this commit. Merge it and run CI before tagging.' >&2
             exit 1
           fi
           gh run watch "$run_id" --exit-status --interval 10
-          echo "run-id=$run_id" >> "$GITHUB_OUTPUT"
 
   publish:
-    name: Publish verified artifact
+    name: Publish release build
     needs: verified-ci
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions:
       contents: write
-      actions: read
     steps:
-      - name: Download the successful CI artifact
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          name: mdspec-linux-x86_64
-          path: dist
-          run-id: ${{ needs.verified-ci.outputs.run-id }}
-          github-token: ${{ github.token }}
-      - name: Verify checksums
-        working-directory: dist
-        run: sha256sum --check SHA256SUMS
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: rustup show active-toolchain
+      - name: Install just
+        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad
+        with:
+          tool: just@1.58.0
+      - name: Build, smoke test, package
+        run: just package
       - name: Publish release and assets
         env:
           GH_TOKEN: ${{ github.token }}
