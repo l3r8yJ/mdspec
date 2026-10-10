@@ -72,6 +72,18 @@ fn accepts_references_sections_inside_each_endpoint() {
 }
 
 #[test]
+fn resolves_a_link_to_a_repeated_section_of_another_endpoint() {
+    let document = format!("{ENDPOINT}{SECOND}## Ссылки\n\n[a]: #логика-работы-1\n");
+    assert_that!(check(&document, "")).is_empty();
+}
+
+#[test]
+fn rejects_a_link_to_a_repeated_section_beyond_the_last_endpoint() {
+    let document = format!("{ENDPOINT}{SECOND}## Ссылки\n\n[a]: #логика-работы-2\n");
+    assert_that!(check(&document, "")).is_equal_to(vec![rule("MDS013", 19)]);
+}
+
+#[test]
 fn rejects_shared_references_that_are_not_at_the_end_of_the_document() {
     let document = format!("{ENDPOINT}## Ссылки\n\n[a]: #эндпоинт-а\n\n{SECOND}");
     assert_that!(check(&document, "")).contains_all_of([rule("MDS015", 11), rule("MDS015", 13)]);

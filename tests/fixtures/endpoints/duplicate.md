@@ -64,5 +64,5 @@ Path: `DELETE /v1/backups/{id}`
 
 ## Ссылки
 
-[rights]: #проверка-прав
-[get]: #эндпоинт-получение
+[rights]: https://example.com/rights
+[get]: https://example.com/backups
