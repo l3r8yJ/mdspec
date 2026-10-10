@@ -402,6 +402,8 @@ mdspec check docs/notes.txt
 
 ## Contributing
 
+Tasks live in [tasks/](tasks) in the [tatr](https://github.com/tsoding/tatr) layout: one `tasks/<YYYYMMDD-HHMMSS>/TASK.md` per task, with the time in UTC. Tags are described in [tasks/tags](tasks/tags). Reference the task ID in commits and PRs.
+
 Install tools once:
 
 ```sh
