@@ -24,7 +24,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          fetch-depth: 2
           persist-credentials: false
       - name: Install pinned Rust toolchain
         run: rustup show active-toolchain
@@ -36,19 +35,12 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: just verify-tag
-      - name: Require the tag to only bump the version
-        run: |
-          changed=$(git diff --name-only HEAD^ HEAD | sort | paste -sd ' ')
-          if [[ "$changed" != 'Cargo.lock Cargo.toml' ]]; then
-            echo "The release commit must change only Cargo.toml and Cargo.lock, got: $changed" >&2
-            exit 1
-          fi
-      - name: Find and await CI for the released main commit
+      - name: Find and await CI for the tagged main commit
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          commit_sha=$(git rev-parse HEAD^)
+          commit_sha=$(git rev-parse HEAD)
           run_id=$(gh run list --workflow ci.yml --commit "$commit_sha" --branch main --event push --limit 1 --json databaseId --jq '.[0].databaseId // empty')
           if [[ -z "$run_id" ]]; then
             echo 'No main-branch push CI run exists for this commit. Merge it and run CI before tagging.' >&2
