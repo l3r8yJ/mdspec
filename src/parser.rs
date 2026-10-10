@@ -38,6 +38,7 @@ pub fn parse(source: &str) -> Document {
         table_rows: Vec::new(),
         cell: None,
         in_html_comment: false,
+        table_of_contents: false,
     };
     let mut events = parser.into_offset_iter();
     while let Some((event, span)) = events.next() {
@@ -71,6 +72,7 @@ struct ParseState<'a> {
     table_rows: Vec<Vec<String>>,
     cell: Option<String>,
     in_html_comment: bool,
+    table_of_contents: bool,
 }
 
 impl ParseState<'_> {
@@ -150,6 +152,11 @@ impl ParseState<'_> {
         let start = self.positions.at(span.start);
 
         if self.depth == 0 {
+            self.table_of_contents = matches!(tag, Tag::Paragraph)
+                && matches!(
+                    self.positions.source.get(span.clone()).map(str::trim),
+                    Some("[TOC]" | "[[_TOC_]]")
+                );
             let kind = match &tag {
                 Tag::Heading { level, .. } => BlockKind::Heading(*level as u8),
                 Tag::Table(_) => BlockKind::Table(Vec::new()),
@@ -204,6 +211,7 @@ impl ParseState<'_> {
                     key,
                     url: (!unknown).then(|| dest_url.to_string()),
                     position: start,
+                    table_of_contents: unknown && self.table_of_contents,
                 });
             }
             _ => {}

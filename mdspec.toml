@@ -12,6 +12,7 @@ require_reference_style = true
 definitions_at_end = true
 validate_local_paths = true
 validate_anchors = true
+toc_allowed = false
 
 [diagnostics]
 warnings_as_errors = false
