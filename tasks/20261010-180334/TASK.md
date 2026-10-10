@@ -2,7 +2,7 @@
 
 - STATUS: CLOSED
 - PRIORITY: 50
-- TAGS: release
+- TAGS: release, v0.1.2
 - GITHUB: #20
 
 Release `v0.1.2` from `fd97c82`.

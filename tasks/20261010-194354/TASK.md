@@ -1,8 +1,8 @@
 # Release v0.1.3
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 50
-- TAGS: release
+- TAGS: release, v0.1.3
 
 Release `v0.1.3` from `4286bc7`.
 
