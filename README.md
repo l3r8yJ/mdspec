@@ -441,6 +441,8 @@ mdspec check docs/notes.txt
 
 Tasks live in [tasks/](tasks) in the [tatr](https://github.com/tsoding/tatr) layout: one `tasks/<YYYYMMDD-HHMMSS>/TASK.md` per task, with the time in UTC. Tags are described in [tasks/tags](tasks/tags). Reference the task ID in commits and PRs.
 
+Every task is also tagged with the release that ships it, e.g. `v0.1.3`, and that tag is added to `tasks/tags`. `tatr ls -c :v0.1.3` lists what a release contains. New tasks get the next version tag, marked `planned` in `tasks/tags` until that release ships, then `shipped`.
+
 Install tools once:
 
 ```sh
