@@ -18,6 +18,7 @@ pub enum BlockKind {
     Paragraph,
     Heading(u8),
     Table(Vec<Vec<String>>),
+    Code,
     Content,
     Definition,
 }

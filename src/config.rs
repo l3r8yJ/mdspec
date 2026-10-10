@@ -17,10 +17,13 @@ pub struct Labels {
     pub logic: String,
     pub components: String,
     pub mappings: String,
+    pub examples: String,
     pub references: String,
     pub description: String,
     pub source: String,
     pub target: String,
+    pub request: String,
+    pub response: String,
 }
 
 impl Default for Labels {
@@ -31,20 +34,24 @@ impl Default for Labels {
             logic: "Логика работы".into(),
             components: "Компоненты".into(),
             mappings: "Маппинги".into(),
+            examples: "Примеры".into(),
             references: "Ссылки".into(),
             description: "Описание".into(),
             source: "Source".into(),
             target: "Target".into(),
+            request: "Запрос".into(),
+            response: "Ответ".into(),
         }
     }
 }
 
 impl Labels {
-    pub fn sections(&self) -> [&str; 4] {
+    pub fn sections(&self) -> [&str; 5] {
         [
             &self.logic,
             &self.components,
             &self.mappings,
+            &self.examples,
             &self.references,
         ]
     }
@@ -56,6 +63,8 @@ impl Labels {
             self.description.as_str(),
             self.source.as_str(),
             self.target.as_str(),
+            self.request.as_str(),
+            self.response.as_str(),
         ];
         sections.iter().chain(labels.iter()).all(|label| {
             !label.is_empty() && label.trim() == *label && !label.contains(['\n', '\r'])
@@ -65,6 +74,7 @@ impl Labels {
                 .take(index)
                 .any(|previous| previous == label)
         }) && self.source != self.target
+            && self.request != self.response
     }
 }
 
@@ -75,6 +85,7 @@ pub struct DocumentConfig {
     pub require_logic: bool,
     pub require_components: bool,
     pub require_mappings: bool,
+    pub require_examples: bool,
     pub enforce_section_order: bool,
     pub allow_unknown_sections: bool,
     pub multiple_endpoints: bool,
@@ -87,6 +98,7 @@ impl Default for DocumentConfig {
             require_logic: true,
             require_components: false,
             require_mappings: false,
+            require_examples: false,
             enforce_section_order: true,
             allow_unknown_sections: true,
             multiple_endpoints: true,
