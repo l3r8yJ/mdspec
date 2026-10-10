@@ -81,9 +81,12 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          options=()
+          prerelease=false
           if [[ "$RELEASE_TAG" == *-* ]]; then
-            options+=(--prerelease)
+            prerelease=true
           fi
-          gh release create "$RELEASE_TAG" dist/*.tar.gz dist/SHA256SUMS \
-            --verify-tag --title "$RELEASE_TAG" --generate-notes "${options[@]}"
+          if ! gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --verify-tag --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" dist/*.tar.gz dist/SHA256SUMS --clobber
+          gh release edit "$RELEASE_TAG" --title "$RELEASE_TAG" --prerelease="$prerelease"
