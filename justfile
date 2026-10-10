@@ -55,6 +55,10 @@ package: smoke
     sha256sum ./*.tar.gz > SHA256SUMS
     sha256sum --check SHA256SUMS
 
+set-version version:
+    sed -i '0,/^version = ".*"$/s//version = "{{ version }}"/' Cargo.toml
+    sed -i '/^name = "mdspec"$/{n;s/^version = ".*"$/version = "{{ version }}"/}' Cargo.lock
+
 verify-tag:
     #!/usr/bin/env bash
     set -euo pipefail
