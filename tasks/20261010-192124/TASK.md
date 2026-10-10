@@ -15,7 +15,7 @@ and rejects when `allow_unknown_sections = false`.
 
 Add an optional examples section to the endpoint structure:
 
-```md
+~~~md
 ### Примеры
 
 #### Запрос
@@ -29,7 +29,7 @@ Add an optional examples section to the endpoint structure:
 ```json
 {"id": 1, "name": "backup"}
 ```
-```
+~~~
 
 - New labels: `examples` (default `Примеры`), `request` (default `Запрос`),
   `response` (default `Ответ`).
