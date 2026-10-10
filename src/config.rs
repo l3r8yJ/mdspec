@@ -101,6 +101,7 @@ pub struct ReferenceConfig {
     pub definitions_at_end: bool,
     pub validate_local_paths: bool,
     pub validate_anchors: bool,
+    pub toc_allowed: bool,
 }
 
 impl Default for ReferenceConfig {
@@ -110,6 +111,7 @@ impl Default for ReferenceConfig {
             definitions_at_end: true,
             validate_local_paths: true,
             validate_anchors: true,
+            toc_allowed: false,
         }
     }
 }

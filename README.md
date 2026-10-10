@@ -78,6 +78,7 @@ Only a file passed with `--config` is read. Unknown keys are errors. All keys an
 - `document.multiple_endpoints = false` allows exactly one endpoint per document. By default every `## <endpoint_prefix> name` heading starts an endpoint that runs to the next H2. Section and component rules apply per endpoint. An optional H1 title and other H2 sections such as general rules are not checked. Link definitions go in each endpoint's references section or in one H2 references section at the end of the document.
 - `references.require_reference_style = false` allows inline local links.
 - `references.definitions_at_end = false` allows definitions anywhere.
+- `references.toc_allowed = true` accepts a paragraph that is only `[TOC]` or `[[_TOC_]]` as a table of contents marker instead of an undefined reference.
 
 ## Rules
 

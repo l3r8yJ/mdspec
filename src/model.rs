@@ -34,6 +34,7 @@ pub struct Link {
     pub key: Option<String>,
     pub url: Option<String>,
     pub position: Position,
+    pub table_of_contents: bool,
 }
 
 #[derive(Debug, Default)]

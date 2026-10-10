@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::config::Config;
 use crate::diagnostics::{Diagnostic, Severity};
-use crate::model::{Block, BlockKind, Document, Position};
+use crate::model::{Block, BlockKind, Document, Link, Position};
 use crate::{parser, rules};
 
 type TargetCache = HashMap<PathBuf, Result<HashSet<String>, String>>;
@@ -48,7 +48,7 @@ impl Validation<'_> {
     }
 
     fn links(&mut self) {
-        for link in &self.document.links {
+        for link in checked_links(self.document, self.config) {
             match (&link.key, &link.url) {
                 (Some(key), None) => self.error(
                     "MDS011",
@@ -94,20 +94,14 @@ impl Validation<'_> {
 
     fn placement(&mut self) {
         let sections = reference_sections(self.document, self.config);
-        if sections.is_empty()
-            && (!self.document.links.is_empty() || !self.document.definitions.is_empty())
-        {
-            let position = self
-                .document
-                .links
-                .first()
-                .map(|link| link.position)
-                .or_else(|| {
-                    self.document
-                        .definitions
-                        .first()
-                        .map(|definition| definition.position)
-                });
+        let first_link = checked_links(self.document, self.config).next();
+        if sections.is_empty() && (first_link.is_some() || !self.document.definitions.is_empty()) {
+            let position = first_link.map(|link| link.position).or_else(|| {
+                self.document
+                    .definitions
+                    .first()
+                    .map(|definition| definition.position)
+            });
             self.error(
                 "MDS015",
                 position,
@@ -222,6 +216,13 @@ impl Validation<'_> {
             _ => {}
         }
     }
+}
+
+fn checked_links<'a>(document: &'a Document, config: &'a Config) -> impl Iterator<Item = &'a Link> {
+    document
+        .links
+        .iter()
+        .filter(|link| !(link.table_of_contents && config.references.toc_allowed))
 }
 
 fn reference_sections<'a>(document: &'a Document, config: &Config) -> Vec<&'a [Block]> {
