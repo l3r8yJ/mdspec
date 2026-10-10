@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use crate::config::Config;
 use crate::diagnostics::{Diagnostic, Severity};
 use crate::model::{Block, BlockKind, Document, Position};
-use crate::parser;
+use crate::{parser, rules};
 
 type TargetCache = HashMap<PathBuf, Result<HashSet<String>, String>>;
 
@@ -93,11 +93,8 @@ impl Validation<'_> {
     }
 
     fn placement(&mut self) {
-        let references = self.document.blocks.iter().find(|block| {
-            matches!(block.kind, BlockKind::Heading(3))
-                && block.text.trim() == self.config.labels.references
-        });
-        if references.is_none()
+        let sections = reference_sections(self.document, self.config);
+        if sections.is_empty()
             && (!self.document.links.is_empty() || !self.document.definitions.is_empty())
         {
             let position = self
@@ -124,24 +121,26 @@ impl Validation<'_> {
             return;
         }
         for definition in &self.document.definitions {
-            if !definition_is_terminal(self.document, definition.position.offset, references) {
+            if !sections
+                .iter()
+                .any(|section| definition_is_terminal(section, definition.position.offset))
+            {
                 self.error("MDS015", Some(definition.position), format!("Reference definitions must appear in the {} section at the end of the document", self.config.labels.references));
             }
         }
-        if let Some(references) = references {
-            for block in self.document.blocks.iter().filter(|block| {
-                block.position.offset > references.position.offset
-                    && !matches!(block.kind, BlockKind::Definition)
-            }) {
-                self.error(
-                    "MDS015",
-                    Some(block.position),
-                    format!(
-                        "Only reference definitions are allowed after the {} heading",
-                        self.config.labels.references
-                    ),
-                );
-            }
+        for block in sections
+            .iter()
+            .flat_map(|section| section.iter())
+            .filter(|block| !matches!(block.kind, BlockKind::Definition))
+        {
+            self.error(
+                "MDS015",
+                Some(block.position),
+                format!(
+                    "Only reference definitions are allowed after the {} heading",
+                    self.config.labels.references
+                ),
+            );
         }
     }
 
@@ -225,19 +224,34 @@ impl Validation<'_> {
     }
 }
 
-fn definition_is_terminal(document: &Document, offset: usize, references: Option<&Block>) -> bool {
-    let Some(references) = references else {
-        return false;
-    };
-    let mut content = document
+fn reference_sections<'a>(document: &'a Document, config: &Config) -> Vec<&'a [Block]> {
+    let multiple = config.document.multiple_endpoints;
+    let sections = document
         .blocks
         .iter()
-        .skip_while(|block| !std::ptr::eq(*block, references))
-        .skip(1);
-    content
-        .clone()
+        .enumerate()
+        .filter(|(_, block)| block.text.trim() == config.labels.references)
+        .filter_map(|(index, block)| {
+            let extent = match block.kind {
+                BlockKind::Heading(3) if multiple => 2,
+                BlockKind::Heading(3) => 0,
+                BlockKind::Heading(2) if multiple => 0,
+                _ => return None,
+            };
+            Some(rules::children(&document.blocks, index, extent))
+        });
+    if multiple {
+        sections.collect()
+    } else {
+        sections.take(1).collect()
+    }
+}
+
+fn definition_is_terminal(section: &[Block], offset: usize) -> bool {
+    section
+        .iter()
         .all(|block| matches!(block.kind, BlockKind::Definition))
-        && content.any(|block| block.position.offset == offset)
+        && section.iter().any(|block| block.position.offset == offset)
 }
 
 fn check_file(target: &Path) -> Result<(), String> {

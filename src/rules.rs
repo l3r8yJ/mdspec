@@ -1,29 +1,42 @@
 use crate::config::{Config, Labels};
 use crate::diagnostics::Diagnostic;
-use crate::model::{Block, BlockKind, Document};
+use crate::model::{Block, BlockKind, Document, Position};
 use std::collections::HashSet;
 use std::path::Path;
 
 pub fn validate(document: &Document, path: &Path, config: &Config) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
-    validate_endpoint(document, path, config, &mut diagnostics);
-    validate_sections(document, path, config, &mut diagnostics);
-    validate_nesting(document, path, config, &mut diagnostics);
-    for (index, block) in document.blocks.iter().enumerate() {
-        if !matches!(block.kind, BlockKind::Heading(3)) {
-            continue;
-        }
-        let children = children(&document.blocks, index, 3);
-        if block.text.trim() == config.labels.components {
-            validate_components(children, path, &config.labels, &mut diagnostics);
-        } else if block.text.trim() == config.labels.mappings {
-            validate_mappings(children, path, &config.labels, &mut diagnostics);
-        }
+    if config.document.multiple_endpoints {
+        validate_endpoints(&document.blocks, path, config, &mut diagnostics);
+    } else {
+        validate_endpoint(document, path, config, &mut diagnostics);
+        diagnostics.extend(validate_sections(&document.blocks, None, path, config));
+        validate_details(&document.blocks, path, &config.labels, &mut diagnostics);
     }
+    validate_nesting(document, path, config, &mut diagnostics);
     diagnostics
 }
 
-fn children(blocks: &[Block], index: usize, depth: u8) -> &[Block] {
+fn validate_details(
+    blocks: &[Block],
+    path: &Path,
+    labels: &Labels,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    for (index, block) in blocks.iter().enumerate() {
+        if !matches!(block.kind, BlockKind::Heading(3)) {
+            continue;
+        }
+        let children = children(blocks, index, 3);
+        if block.text.trim() == labels.components {
+            validate_components(children, path, labels, diagnostics);
+        } else if block.text.trim() == labels.mappings {
+            validate_mappings(children, path, labels, diagnostics);
+        }
+    }
+}
+
+pub fn children(blocks: &[Block], index: usize, depth: u8) -> &[Block] {
     let rest = blocks.get(index + 1..).unwrap_or_default();
     let length = rest
         .iter()
@@ -75,8 +88,79 @@ fn validate_endpoint(
             ));
         }
     }
-    let paths: Vec<_> = document
-        .blocks
+    diagnostics.extend(validate_path(
+        &document.blocks,
+        headings.first().map(|(index, _)| *index),
+        path,
+        config,
+    ));
+}
+
+fn validate_endpoints(
+    blocks: &[Block],
+    path: &Path,
+    config: &Config,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let endpoints: Vec<_> = blocks
+        .iter()
+        .enumerate()
+        .filter_map(|(index, heading)| {
+            let name = endpoint_name(heading, &config.labels)?;
+            let endpoint = blocks.get(index..=index + children(blocks, index, 2).len())?;
+            Some((heading, name, endpoint))
+        })
+        .collect();
+    if endpoints.is_empty() && config.document.require_endpoint {
+        diagnostics.push(Diagnostic::error(
+            "MDS001",
+            path,
+            None,
+            format!("Missing H2 heading: {} name", config.labels.endpoint_prefix),
+        ));
+    }
+    for (heading, name, endpoint) in endpoints {
+        if name.is_empty() {
+            diagnostics.push(issue(
+                "MDS001",
+                path,
+                heading,
+                format!(
+                    "Expected H2 heading: {} name",
+                    config.labels.endpoint_prefix
+                ),
+            ));
+        }
+        diagnostics.extend(validate_path(endpoint, Some(0), path, config));
+        diagnostics.extend(validate_sections(
+            endpoint,
+            Some(heading.position),
+            path,
+            config,
+        ));
+        validate_details(endpoint, path, &config.labels, diagnostics);
+    }
+}
+
+fn endpoint_name<'a>(block: &'a Block, labels: &Labels) -> Option<&'a str> {
+    if !matches!(block.kind, BlockKind::Heading(2)) {
+        return None;
+    }
+    block
+        .text
+        .trim()
+        .strip_prefix(labels.endpoint_prefix.as_str())
+        .map(str::trim)
+}
+
+fn validate_path(
+    blocks: &[Block],
+    heading: Option<usize>,
+    path: &Path,
+    config: &Config,
+) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    let paths: Vec<_> = blocks
         .iter()
         .enumerate()
         .take_while(|(_, block)| !matches!(block.kind, BlockKind::Heading(3)))
@@ -88,18 +172,18 @@ fn validate_endpoint(
                     .starts_with(config.labels.path_prefix.as_str())
         })
         .collect();
-    if paths.is_empty() && (config.document.require_endpoint || !headings.is_empty()) {
+    if paths.is_empty() && (config.document.require_endpoint || heading.is_some()) {
         diagnostics.push(Diagnostic::error(
             "MDS002",
             path,
-            headings.first().map(|(_, block)| block.position),
+            heading
+                .and_then(|index| blocks.get(index))
+                .map(|block| block.position),
             format!("Missing {} METHOD /path", config.labels.path_prefix),
         ));
     }
     for (index, block) in paths {
-        let immediately_after_endpoint = headings
-            .first()
-            .is_some_and(|(heading_index, _)| index == heading_index + 1);
+        let immediately_after_endpoint = heading.is_some_and(|heading| index == heading + 1);
         if !immediately_after_endpoint || !valid_path(&block.text, &config.labels) {
             diagnostics.push(issue(
                 "MDS002",
@@ -112,6 +196,7 @@ fn validate_endpoint(
             ));
         }
     }
+    diagnostics
 }
 
 fn valid_path(text: &str, labels: &Labels) -> bool {
@@ -130,14 +215,15 @@ fn valid_path(text: &str, labels: &Labels) -> bool {
 }
 
 fn validate_sections(
-    document: &Document,
+    blocks: &[Block],
+    endpoint: Option<Position>,
     path: &Path,
     config: &Config,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
+) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
     let mut seen = HashSet::new();
     let mut next_rank = 0;
-    for (index, block) in document.blocks.iter().enumerate() {
+    for (index, block) in blocks.iter().enumerate() {
         if !matches!(block.kind, BlockKind::Heading(3)) {
             continue;
         }
@@ -176,7 +262,7 @@ fn validate_sections(
             ));
         }
         next_rank = next_rank.max(rank + 1);
-        let contents = children(&document.blocks, index, 3);
+        let contents = children(blocks, index, 3);
         let populated = match rank {
             0 => contents.iter().any(has_content),
             1 | 2 => contents
@@ -193,15 +279,17 @@ fn validate_sections(
             ));
         }
     }
-    validate_required_sections(&seen, path, config, diagnostics);
+    diagnostics.extend(validate_required_sections(&seen, endpoint, path, config));
+    diagnostics
 }
 
 fn validate_required_sections(
     seen: &HashSet<&str>,
+    endpoint: Option<Position>,
     path: &Path,
     config: &Config,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
+) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
     for (name, required) in [
         (config.labels.logic.as_str(), config.document.require_logic),
         (
@@ -217,11 +305,12 @@ fn validate_required_sections(
             diagnostics.push(Diagnostic::error(
                 "MDS003",
                 path,
-                None,
+                endpoint,
                 format!("Missing required section: {name}"),
             ));
         }
     }
+    diagnostics
 }
 
 fn has_content(block: &Block) -> bool {
@@ -240,17 +329,24 @@ fn validate_nesting(
     let mut section = "";
     let mut component = false;
     let mut endpoint = !config.document.require_endpoint;
+    let mut title_allowed = config.document.multiple_endpoints;
+    let mut unchecked = false;
     for block in &document.blocks {
         let BlockKind::Heading(depth) = block.kind else {
             continue;
         };
         let valid = match depth {
+            1 => title_allowed,
             2 => {
                 endpoint = true;
+                title_allowed = false;
+                unchecked = config.document.multiple_endpoints
+                    && endpoint_name(block, &config.labels).is_none();
                 section = "";
                 component = false;
                 true
             }
+            _ if unchecked => true,
             3 => {
                 section = block.text.trim();
                 component = false;

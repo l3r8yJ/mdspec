@@ -34,8 +34,15 @@ fn rejects_a_second_endpoint_even_when_both_names_are_valid() {
         "{}\n## Эндпоинт: Второй\n",
         include_str!("fixtures/minimal.md")
     );
-    let report = check(&document, "");
+    let report = check(&document, "[document]\nmultiple_endpoints = false\n");
     assert_that!(rule_count(&report, "MDS001")).is_equal_to(1);
+}
+
+#[test]
+fn reports_missing_endpoint_path_and_logic_together_for_a_single_endpoint() {
+    let report = check("", "[document]\nmultiple_endpoints = false\n");
+    assert_that!(["MDS001", "MDS002", "MDS003"].map(|rule| rule_count(&report, rule)))
+        .is_equal_to([1, 1, 1]);
 }
 
 #[test]

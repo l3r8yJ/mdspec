@@ -77,6 +77,7 @@ pub struct DocumentConfig {
     pub require_mappings: bool,
     pub enforce_section_order: bool,
     pub allow_unknown_sections: bool,
+    pub multiple_endpoints: bool,
 }
 
 impl Default for DocumentConfig {
@@ -88,6 +89,7 @@ impl Default for DocumentConfig {
             require_mappings: false,
             enforce_section_order: true,
             allow_unknown_sections: true,
+            multiple_endpoints: true,
         }
     }
 }
