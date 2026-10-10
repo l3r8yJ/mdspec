@@ -21,10 +21,13 @@ path_prefix = "Path:"
 logic = "Logic"
 components = "Components"
 mappings = "Mappings"
+examples = "Examples"
 references = "References"
 description = "Description"
 source = "Source"
 target = "Target"
+request = "Request"
+response = "Response"
 ```
 
 Write a document:
@@ -75,6 +78,7 @@ Only a file passed with `--config` is read. Unknown keys are errors. All keys an
 
 - `document.require_endpoint = false` allows documents without the endpoint heading and path.
 - `document.allow_unknown_sections = false` rejects sections not listed in `[labels]`.
+- `document.require_examples = true` requires the examples section.
 - `document.multiple_endpoints = false` allows exactly one endpoint per document. By default every `## <endpoint_prefix> name` heading starts an endpoint that runs to the next H2. Section and component rules apply per endpoint. An optional H1 title and other H2 sections such as general rules are not checked. Link definitions go in each endpoint's references section or in one H2 references section at the end of the document.
 - `references.require_reference_style = false` allows inline local links.
 - `references.definitions_at_end = false` allows definitions anywhere.
@@ -140,6 +144,7 @@ Correct:
 ### Logic
 ### Components
 ### Mappings
+### Examples
 ### References
 ```
 
@@ -355,6 +360,38 @@ Incorrect:
 ```md
 [list]: items.md
 ```
+
+### MDS017 Examples
+
+Examples are optional. Each one is a request or response H4 with a fenced code block, at most once per endpoint.
+
+Correct:
+
+````md
+### Examples
+
+#### Request
+
+```json
+{"name": "backup"}
+```
+
+#### Response
+
+```json
+{"id": 1}
+```
+````
+
+Incorrect:
+
+````md
+### Examples
+
+#### Headers
+
+Accept: application/json
+````
 
 ### MDS900 Configuration
 

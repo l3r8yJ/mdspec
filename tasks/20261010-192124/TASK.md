@@ -1,6 +1,6 @@
 # Support request and response examples for an endpoint
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 50
 - TAGS: enhancement
 

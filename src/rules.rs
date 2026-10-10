@@ -32,6 +32,8 @@ fn validate_details(
             validate_components(children, path, labels, diagnostics);
         } else if block.text.trim() == labels.mappings {
             validate_mappings(children, path, labels, diagnostics);
+        } else if block.text.trim() == labels.examples {
+            validate_examples(children, path, labels, diagnostics);
         }
     }
 }
@@ -265,7 +267,7 @@ fn validate_sections(
         let contents = children(blocks, index, 3);
         let populated = match rank {
             0 => contents.iter().any(has_content),
-            1 | 2 => contents
+            1..=3 => contents
                 .iter()
                 .any(|child| matches!(child.kind, BlockKind::Heading(4))),
             _ => true,
@@ -300,6 +302,10 @@ fn validate_required_sections(
             config.labels.mappings.as_str(),
             config.document.require_mappings,
         ),
+        (
+            config.labels.examples.as_str(),
+            config.document.require_examples,
+        ),
     ] {
         if required && !seen.contains(name) {
             diagnostics.push(Diagnostic::error(
@@ -316,7 +322,7 @@ fn validate_required_sections(
 fn has_content(block: &Block) -> bool {
     matches!(
         block.kind,
-        BlockKind::Paragraph | BlockKind::Content | BlockKind::Table(_)
+        BlockKind::Paragraph | BlockKind::Code | BlockKind::Content | BlockKind::Table(_)
     ) && !block.text.trim().is_empty()
 }
 
@@ -354,7 +360,10 @@ fn validate_nesting(
             }
             4 => {
                 component = section == config.labels.components;
-                (component || section == config.labels.mappings) && !block.text.trim().is_empty()
+                (component
+                    || section == config.labels.mappings
+                    || section == config.labels.examples)
+                    && !block.text.trim().is_empty()
             }
             5 => component && block.text.trim() == config.labels.description,
             _ => false,
@@ -437,6 +446,38 @@ fn validate_components(
                 ));
             }
         }
+    }
+}
+
+fn validate_examples(
+    blocks: &[Block],
+    path: &Path,
+    labels: &Labels,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let mut names = HashSet::new();
+    for (index, block) in blocks.iter().enumerate() {
+        if !matches!(block.kind, BlockKind::Heading(4)) {
+            continue;
+        }
+        let name = block.text.trim();
+        let known = name == labels.request || name == labels.response;
+        let has_code = children(blocks, index, 4)
+            .iter()
+            .any(|child| matches!(child.kind, BlockKind::Code) && !child.text.trim().is_empty());
+        let message = if !known {
+            format!(
+                "Example {name} must be named {} or {}",
+                labels.request, labels.response
+            )
+        } else if !names.insert(name) {
+            format!("Duplicate example: {name}")
+        } else if !has_code {
+            format!("Example {name} must contain a nonempty fenced code block")
+        } else {
+            continue;
+        };
+        diagnostics.push(issue("MDS017", path, block, message));
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::model::{Block, BlockKind, Definition, Document, Link, Position};
-use pulldown_cmark::{BrokenLink, Event, LinkType, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{BrokenLink, CodeBlockKind, Event, LinkType, Options, Parser, Tag, TagEnd};
 
 pub fn parse(source: &str) -> Document {
     let positions = SourcePositions::new(source);
@@ -161,6 +161,7 @@ impl ParseState<'_> {
                 Tag::Heading { level, .. } => BlockKind::Heading(*level as u8),
                 Tag::Table(_) => BlockKind::Table(Vec::new()),
                 Tag::Paragraph => BlockKind::Paragraph,
+                Tag::CodeBlock(CodeBlockKind::Fenced(_)) => BlockKind::Code,
                 _ => BlockKind::Content,
             };
             self.document.blocks.push(Block {
