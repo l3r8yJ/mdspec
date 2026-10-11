@@ -461,3 +461,5 @@ just full
 ```
 
 `just full` runs everything CI runs, plus mutation testing. It needs committed files and publishes nothing.
+
+To release, open a PR that runs `just set-version X.Y.Z` and closes the release task, merge it, then comment `` @rultor release tag is `vX.Y.Z` `` on that PR. CI fails while `Cargo.toml` is behind the latest tag.

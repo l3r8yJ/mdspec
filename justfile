@@ -64,6 +64,21 @@ set-version version:
     sed -i '0,/^version = ".*"$/s//version = "{{ version }}"/' Cargo.toml
     sed -i '/^name = "mdspec"$/{n;s/^version = ".*"$/version = "{{ version }}"/}' Cargo.lock
 
+deps:
+    cargo deny --locked check
+    cargo machete
+
+verify-version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version=$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "mdspec") | .version')
+    latest=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
+    latest="${latest#v}"
+    if [[ -n "$latest" && "$(printf '%s\n%s\n' "$latest" "$version" | sort -V | head -n 1)" != "$latest" ]]; then
+        echo "Cargo.toml version ${version} is behind the latest release v${latest}" >&2
+        exit 1
+    fi
+
 verify-tag:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -73,6 +88,6 @@ verify-tag:
         exit 1
     fi
 
-ci: fmt-check clippy coverage package publish-check
+ci: fmt-check clippy deps verify-version coverage package publish-check
 
 full: ci mutate
