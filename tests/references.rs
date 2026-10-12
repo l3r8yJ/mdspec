@@ -57,6 +57,19 @@ fn resolves_encoded_fragments_queries_and_same_file_links() {
 }
 
 #[test]
+fn resolves_suffixed_anchors_for_repeated_headings() {
+    let (code, json) = check("tests/fixtures/references/duplicates.md", true);
+    assert_that!(code).is_equal_to(Some(0));
+    assert_that!(
+        json["diagnostics"]
+            .as_array()
+            .expect("diagnostics array")
+            .len()
+    )
+    .is_equal_to(0);
+}
+
+#[test]
 fn rejects_nonterminal_and_misplaced_definitions() {
     let (code, json) = check("tests/fixtures/references/placement.md", false);
     assert_that!(code).is_equal_to(Some(1));
