@@ -1,6 +1,6 @@
 # Fail closed when the CI change detection fails
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 60
 - TAGS: ci,v0.1.4
 
