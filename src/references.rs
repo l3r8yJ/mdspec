@@ -304,9 +304,10 @@ fn anchors(document: &Document) -> HashSet<String> {
             })
             .collect();
         let mut anchor = base.clone();
-        let mut suffix = 0;
-        while anchors.contains(&anchor) {
-            suffix += 1;
+        for suffix in 1..=anchors.len() {
+            if !anchors.contains(&anchor) {
+                break;
+            }
             anchor = format!("{base}-{suffix}");
         }
         anchors.insert(anchor);
