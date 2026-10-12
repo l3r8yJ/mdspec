@@ -1,7 +1,9 @@
 #![cfg(test)]
 
+mod common;
+
 use asserting::prelude::*;
-use std::process::Command;
+use common::Workspace;
 
 const README: &str = include_str!("../README.md");
 
@@ -22,29 +24,14 @@ fn block_after<'a>(marker: &str, fence: &str) -> &'a str {
     .0
 }
 
-fn check(document: &str) -> serde_json::Value {
-    let directory = tempfile::tempdir().expect("temporary directory created");
-    let document_path = directory.path().join("endpoint.md");
-    let config_path = directory.path().join("mdspec.toml");
-    std::fs::write(&document_path, document).expect("document written");
-    std::fs::write(
-        &config_path,
-        block_after("save this as `mdspec.toml`:", "```toml"),
-    )
-    .expect("configuration written");
-    let output = Command::new(env!("CARGO_BIN_EXE_mdspec"))
-        .arg("check")
-        .arg(document_path)
-        .args(["--strict", "--format", "json", "--config"])
-        .arg(config_path)
-        .output()
-        .expect("the built binary starts");
-    serde_json::from_slice(&output.stdout).expect("stdout is JSON")
-}
-
 #[test]
 fn accepts_the_quick_start_document() {
-    let report = check(block_after("Write a document:", "```md"));
+    let workspace = Workspace::new();
+    let (_, report) = workspace.check_document(
+        block_after("Write a document:", "```md"),
+        block_after("save this as `mdspec.toml`:", "```toml"),
+        true,
+    );
     assert_that!(report["diagnostics"].clone()).is_equal_to(serde_json::json!([]));
 }
 
@@ -55,5 +42,11 @@ fn accepts_the_quick_start_document_with_the_documented_examples() {
         block_after("Write a document:", "```md"),
         block_after("### MDS017 Examples", "````md")
     );
-    assert_that!(check(&document)["diagnostics"].clone()).is_equal_to(serde_json::json!([]));
+    let workspace = Workspace::new();
+    let (_, report) = workspace.check_document(
+        &document,
+        block_after("save this as `mdspec.toml`:", "```toml"),
+        true,
+    );
+    assert_that!(report["diagnostics"].clone()).is_equal_to(serde_json::json!([]));
 }
