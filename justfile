@@ -27,6 +27,7 @@ mutate *args:
     cargo mutants --jobs "$workers" --build-timeout 300 "$@"
 
 test-coverage:
+    cargo llvm-cov clean --profraw-only
     cargo llvm-cov --locked --all-features --no-report
 
 coverage-check:
