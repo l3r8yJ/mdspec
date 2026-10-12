@@ -1,6 +1,6 @@
 # Name the invalid label in the MDS900 label message
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 30
 - TAGS: bug,v0.1.4
 

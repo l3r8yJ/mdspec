@@ -1,6 +1,6 @@
 # Generate duplicate heading anchors with a counter
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 50
 - TAGS: refactor,v0.1.4
 

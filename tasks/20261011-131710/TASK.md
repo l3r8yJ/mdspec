@@ -1,6 +1,6 @@
 # Report unused definitions as warnings without --strict
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 20
 - TAGS: bug,v0.1.4
 
