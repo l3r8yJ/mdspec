@@ -1,6 +1,6 @@
 # Share the test binary helper in tests/common
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 40
 - TAGS: refactor,v0.1.4
 
