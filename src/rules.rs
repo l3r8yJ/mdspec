@@ -1,6 +1,7 @@
 use crate::config::{Config, Labels};
 use crate::diagnostics::Diagnostic;
 use crate::model::{Block, BlockKind, Document, Position};
+use crate::rule::Rule;
 use std::collections::HashSet;
 use std::path::Path;
 
@@ -47,7 +48,7 @@ pub fn children(blocks: &[Block], index: usize, depth: u8) -> &[Block] {
     rest.get(..length).unwrap_or_default()
 }
 
-fn issue(rule: &'static str, path: &Path, block: &Block, message: impl Into<String>) -> Diagnostic {
+fn issue(rule: Rule, path: &Path, block: &Block, message: impl Into<String>) -> Diagnostic {
     Diagnostic::error(rule, path, Some(block.position), message)
 }
 
@@ -65,7 +66,7 @@ fn validate_endpoint(
         .collect();
     if headings.is_empty() && config.document.require_endpoint {
         diagnostics.push(Diagnostic::error(
-            "MDS001",
+            Rule::Mds001,
             path,
             None,
             format!("Missing H2 heading: {} name", config.labels.endpoint_prefix),
@@ -80,7 +81,7 @@ fn validate_endpoint(
                 .is_none_or(|name| name.trim().is_empty())
         {
             diagnostics.push(issue(
-                "MDS001",
+                Rule::Mds001,
                 path,
                 heading,
                 format!(
@@ -115,7 +116,7 @@ fn validate_endpoints(
         .collect();
     if endpoints.is_empty() && config.document.require_endpoint {
         diagnostics.push(Diagnostic::error(
-            "MDS001",
+            Rule::Mds001,
             path,
             None,
             format!("Missing H2 heading: {} name", config.labels.endpoint_prefix),
@@ -124,7 +125,7 @@ fn validate_endpoints(
     for (heading, name, endpoint) in endpoints {
         if name.is_empty() {
             diagnostics.push(issue(
-                "MDS001",
+                Rule::Mds001,
                 path,
                 heading,
                 format!(
@@ -176,7 +177,7 @@ fn validate_path(
         .collect();
     if paths.is_empty() && (config.document.require_endpoint || heading.is_some()) {
         diagnostics.push(Diagnostic::error(
-            "MDS002",
+            Rule::Mds002,
             path,
             heading
                 .and_then(|index| blocks.get(index))
@@ -188,7 +189,7 @@ fn validate_path(
         let immediately_after_endpoint = heading.is_some_and(|heading| index == heading + 1);
         if !immediately_after_endpoint || !valid_path(&block.text, &config.labels) {
             diagnostics.push(issue(
-                "MDS002",
+                Rule::Mds002,
                 path,
                 block,
                 format!(
@@ -238,7 +239,7 @@ fn validate_sections(
         else {
             if !config.document.allow_unknown_sections {
                 diagnostics.push(issue(
-                    "MDS006",
+                    Rule::Mds006,
                     path,
                     block,
                     format!("Unknown section: {name}"),
@@ -254,7 +255,7 @@ fn validate_sections(
         };
         if invalid_order {
             diagnostics.push(issue(
-                "MDS004",
+                Rule::Mds004,
                 path,
                 block,
                 format!(
@@ -274,7 +275,7 @@ fn validate_sections(
         };
         if !populated {
             diagnostics.push(issue(
-                "MDS007",
+                Rule::Mds007,
                 path,
                 block,
                 format!("Empty section: {name}"),
@@ -309,7 +310,7 @@ fn validate_required_sections(
     ] {
         if required && !seen.contains(name) {
             diagnostics.push(Diagnostic::error(
-                "MDS003",
+                Rule::Mds003,
                 path,
                 endpoint,
                 format!("Missing required section: {name}"),
@@ -370,7 +371,7 @@ fn validate_nesting(
         };
         if !valid {
             diagnostics.push(issue(
-                "MDS005",
+                Rule::Mds005,
                 path,
                 block,
                 format!(
@@ -382,7 +383,7 @@ fn validate_nesting(
     }
     diagnostics.extend(document.nested_headings.iter().map(|position| {
         Diagnostic::error(
-            "MDS005",
+            Rule::Mds005,
             path,
             Some(*position),
             "Structural headings must not occur inside lists or blockquotes",
@@ -403,7 +404,7 @@ fn validate_components(
         }
         if !names.insert(block.text.trim()) {
             diagnostics.push(issue(
-                "MDS009",
+                Rule::Mds009,
                 path,
                 block,
                 format!("Duplicate component name: {}", block.text),
@@ -420,7 +421,7 @@ fn validate_components(
             .collect();
         if descriptions.is_empty() {
             diagnostics.push(issue(
-                "MDS008",
+                Rule::Mds008,
                 path,
                 block,
                 format!(
@@ -436,7 +437,7 @@ fn validate_components(
                     .any(has_content)
             {
                 diagnostics.push(issue(
-                    "MDS008",
+                    Rule::Mds008,
                     path,
                     description,
                     format!(
@@ -477,7 +478,7 @@ fn validate_examples(
         } else {
             continue;
         };
-        diagnostics.push(issue("MDS017", path, block, message));
+        diagnostics.push(issue(Rule::Mds017, path, block, message));
     }
 }
 
@@ -499,7 +500,7 @@ fn validate_mappings(
                 .collect();
             if tables.is_empty() {
                 diagnostics.push(issue(
-                    "MDS010",
+                    Rule::Mds010,
                     path,
                     block,
                     format!(
@@ -513,7 +514,7 @@ fn validate_mappings(
             }
         } else if matches!(block.kind, BlockKind::Table(_)) && !inside_mapping {
             diagnostics.push(issue(
-                "MDS010",
+                Rule::Mds010,
                 path,
                 block,
                 "A mapping table must belong to a named H4 mapping",
@@ -531,7 +532,7 @@ fn validate_table(block: &Block, path: &Path, labels: &Labels, diagnostics: &mut
     let target = headers.iter().position(|name| name.trim() == labels.target);
     let (Some(source), Some(target)) = (source, target) else {
         diagnostics.push(issue(
-            "MDS010",
+            Rule::Mds010,
             path,
             block,
             format!(
@@ -549,7 +550,7 @@ fn validate_table(block: &Block, path: &Path, labels: &Labels, diagnostics: &mut
         })
     {
         diagnostics.push(issue(
-            "MDS010",
+            Rule::Mds010,
             path,
             block,
             format!(

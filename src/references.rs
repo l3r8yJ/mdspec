@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use crate::config::Config;
 use crate::diagnostics::{Diagnostic, Severity};
 use crate::model::{Block, BlockKind, Document, Link, Position};
+use crate::rule::Rule;
 use crate::{parser, rules};
 
 type TargetCache = HashMap<PathBuf, Result<HashSet<String>, String>>;
@@ -37,12 +38,7 @@ pub fn validate(
 }
 
 impl Validation<'_> {
-    fn error(
-        &mut self,
-        rule: &'static str,
-        position: Option<Position>,
-        message: impl Into<String>,
-    ) {
+    fn error(&mut self, rule: Rule, position: Option<Position>, message: impl Into<String>) {
         self.diagnostics
             .push(Diagnostic::error(rule, self.path, position, message));
     }
@@ -51,14 +47,14 @@ impl Validation<'_> {
         for link in checked_links(self.document, self.config) {
             match (&link.key, &link.url) {
                 (Some(key), None) => self.error(
-                    "MDS011",
+                    Rule::Mds011,
                     Some(link.position),
                     format!("Undefined reference identifier: {key}"),
                 ),
                 (None, Some(url)) => {
                     if self.config.references.require_reference_style && is_local(url) {
                         self.error(
-                            "MDS014",
+                            Rule::Mds014,
                             Some(link.position),
                             "Local links must use reference-style syntax",
                         );
@@ -80,7 +76,7 @@ impl Validation<'_> {
         for definition in &self.document.definitions {
             if strict && !used.contains(definition.key.as_str()) {
                 let mut diagnostic = Diagnostic::error(
-                    "MDS016",
+                    Rule::Mds016,
                     self.path,
                     Some(definition.position),
                     "Reference definition is unused",
@@ -103,7 +99,7 @@ impl Validation<'_> {
                     .map(|definition| definition.position)
             });
             self.error(
-                "MDS015",
+                Rule::Mds015,
                 position,
                 format!(
                     "Documents with links must contain the {} section",
@@ -119,7 +115,7 @@ impl Validation<'_> {
                 .iter()
                 .any(|section| definition_is_terminal(section, definition.position.offset))
             {
-                self.error("MDS015", Some(definition.position), format!("Reference definitions must appear in the {} section at the end of the document", self.config.labels.references));
+                self.error(Rule::Mds015, Some(definition.position), format!("Reference definitions must appear in the {} section at the end of the document", self.config.labels.references));
             }
         }
         for block in sections
@@ -128,7 +124,7 @@ impl Validation<'_> {
             .filter(|block| !matches!(block.kind, BlockKind::Definition))
         {
             self.error(
-                "MDS015",
+                Rule::Mds015,
                 Some(block.position),
                 format!(
                     "Only reference definitions are allowed after the {} heading",
@@ -155,7 +151,7 @@ impl Validation<'_> {
             .map_or(resource, |(resource, _)| resource);
         let Some(decoded_path) = percent_decode(raw_path) else {
             self.error(
-                "MDS012",
+                Rule::Mds012,
                 Some(position),
                 "Invalid percent encoding in local path",
             );
@@ -174,7 +170,7 @@ impl Validation<'_> {
             && !same_file
             && let Err(error) = check_file(&target)
         {
-            self.error("MDS012", Some(position), error);
+            self.error(Rule::Mds012, Some(position), error);
             return;
         }
         if same_file
@@ -195,7 +191,7 @@ impl Validation<'_> {
         }
         let Some(fragment) = percent_decode(fragment) else {
             self.error(
-                "MDS013",
+                Rule::Mds013,
                 Some(position),
                 "Invalid percent encoding in link fragment",
             );
@@ -208,11 +204,11 @@ impl Validation<'_> {
         };
         match target_anchors {
             Ok(anchors) if !anchors.contains(&fragment) => self.error(
-                "MDS013",
+                Rule::Mds013,
                 Some(position),
                 format!("Anchor #{fragment} not found in {}", target.display()),
             ),
-            Err(error) => self.error("MDS012", Some(position), error),
+            Err(error) => self.error(Rule::Mds012, Some(position), error),
             _ => {}
         }
     }

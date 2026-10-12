@@ -1,4 +1,5 @@
 use crate::diagnostics::Diagnostic;
+use crate::rule::Rule;
 use globset::{GlobBuilder, GlobMatcher};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -95,7 +96,7 @@ pub fn normalize(path: &Path) -> std::io::Result<PathBuf> {
 
 fn invalid(path: &Path, error: impl std::fmt::Display) -> Diagnostic {
     Diagnostic::error(
-        "MDS901",
+        Rule::Mds901,
         path,
         None,
         format!("Invalid selection pattern: {error}"),

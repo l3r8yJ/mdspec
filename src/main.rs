@@ -5,6 +5,7 @@ mod model;
 mod parser;
 mod references;
 mod reporter;
+mod rule;
 mod rules;
 mod workspace;
 
@@ -13,6 +14,7 @@ use cli::{Cli, Command};
 use config::Config;
 use diagnostics::{Diagnostic, Severity};
 use reporter::Report;
+use rule::Rule;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -61,7 +63,7 @@ fn check(
                 files_checked += 1;
             }
             Err(error) => diagnostics.push(Diagnostic::error(
-                "MDS901",
+                Rule::Mds901,
                 &file,
                 None,
                 format!("Could not read UTF-8 document: {error}"),
@@ -82,7 +84,7 @@ fn load_config(path: Option<&Path>) -> Result<Config, Box<Diagnostic>> {
     };
     let source = fs::read_to_string(path).map_err(|error| {
         Box::new(Diagnostic::error(
-            "MDS900",
+            Rule::Mds900,
             path,
             None,
             format!("Could not read configuration: {error}"),
@@ -90,7 +92,7 @@ fn load_config(path: Option<&Path>) -> Result<Config, Box<Diagnostic>> {
     })?;
     let config: Config = toml::from_str(&source).map_err(|error| {
         Box::new(Diagnostic::error(
-            "MDS900",
+            Rule::Mds900,
             path,
             None,
             format!("Invalid TOML configuration: {error}"),
@@ -98,7 +100,7 @@ fn load_config(path: Option<&Path>) -> Result<Config, Box<Diagnostic>> {
     })?;
     if !config.labels.is_valid() {
         return Err(Box::new(Diagnostic::error(
-            "MDS900",
+            Rule::Mds900,
             path,
             None,
             "Labels must be nonempty single-line strings without surrounding whitespace; section labels must be distinct, and source and target labels must differ",

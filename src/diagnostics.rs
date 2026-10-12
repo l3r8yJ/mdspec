@@ -1,4 +1,5 @@
 use crate::model::Position;
+use crate::rule::Rule;
 use serde::Serialize;
 use std::path::Path;
 
@@ -11,7 +12,7 @@ pub enum Severity {
 
 #[derive(Debug, Serialize)]
 pub struct Diagnostic {
-    pub rule: &'static str,
+    pub rule: Rule,
     pub severity: Severity,
     pub file: String,
     pub line: Option<usize>,
@@ -22,7 +23,7 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     pub fn error(
-        rule: &'static str,
+        rule: Rule,
         path: &Path,
         position: Option<Position>,
         message: impl Into<String>,
