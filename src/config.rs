@@ -47,35 +47,62 @@ impl Default for Labels {
 
 impl Labels {
     pub fn sections(&self) -> [&str; 5] {
+        self.named_sections().map(|(_, label)| label)
+    }
+    pub fn validation_errors(&self) -> Vec<String> {
+        let section_labels = self.named_sections();
+        let other_labels = [
+            ("endpoint_prefix", self.endpoint_prefix.as_str()),
+            ("path_prefix", self.path_prefix.as_str()),
+            ("description", self.description.as_str()),
+            ("source", self.source.as_str()),
+            ("target", self.target.as_str()),
+            ("request", self.request.as_str()),
+            ("response", self.response.as_str()),
+        ];
+        let mut errors: Vec<String> = section_labels
+            .iter()
+            .chain(other_labels.iter())
+            .filter_map(|(key, value)| shape_error(key, value))
+            .collect();
+        for (index, (key, value)) in section_labels.iter().enumerate() {
+            let duplicates = section_labels
+                .iter()
+                .skip(index + 1)
+                .filter(|(_, other)| other == value)
+                .map(|(other, _)| format!("labels.{key} and labels.{other} must differ"));
+            errors.extend(duplicates);
+        }
+        if self.source == self.target {
+            errors.push("labels.source and labels.target must differ".into());
+        }
+        if self.request == self.response {
+            errors.push("labels.request and labels.response must differ".into());
+        }
+        errors
+    }
+    const fn named_sections(&self) -> [(&'static str, &str); 5] {
         [
-            &self.logic,
-            &self.components,
-            &self.mappings,
-            &self.examples,
-            &self.references,
+            ("logic", self.logic.as_str()),
+            ("components", self.components.as_str()),
+            ("mappings", self.mappings.as_str()),
+            ("examples", self.examples.as_str()),
+            ("references", self.references.as_str()),
         ]
     }
-    pub fn is_valid(&self) -> bool {
-        let sections = self.sections();
-        let labels = [
-            self.endpoint_prefix.as_str(),
-            self.path_prefix.as_str(),
-            self.description.as_str(),
-            self.source.as_str(),
-            self.target.as_str(),
-            self.request.as_str(),
-            self.response.as_str(),
-        ];
-        sections.iter().chain(labels.iter()).all(|label| {
-            !label.is_empty() && label.trim() == *label && !label.contains(['\n', '\r'])
-        }) && sections.iter().enumerate().all(|(index, label)| {
-            !sections
-                .iter()
-                .take(index)
-                .any(|previous| previous == label)
-        }) && self.source != self.target
-            && self.request != self.response
-    }
+}
+
+fn shape_error(key: &str, value: &str) -> Option<String> {
+    let reason = if value.is_empty() {
+        "must not be empty"
+    } else if value.trim() != value {
+        "must not have surrounding whitespace"
+    } else if value.contains(['\n', '\r']) {
+        "must not span multiple lines"
+    } else {
+        return None;
+    };
+    Some(format!("labels.{key} {reason}"))
 }
 
 #[derive(Debug, Deserialize)]

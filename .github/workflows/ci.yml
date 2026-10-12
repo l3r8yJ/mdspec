@@ -25,13 +25,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Install pinned Rust toolchain
         run: rustup show active-toolchain
       - name: Install just
-        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad
+        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
         with:
           tool: just@1.58.0
       - name: Check formatting
@@ -43,13 +43,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Install pinned Rust toolchain
         run: rustup show active-toolchain
       - name: Install just
-        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad
+        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
         with:
           tool: just@1.58.0
       - name: Check all targets and features
@@ -60,13 +60,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Install pinned Rust toolchain
         run: rustup show active-toolchain
       - name: Install just and dependency checkers
-        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad
+        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
         with:
           tool: just@1.58.0,cargo-deny@0.20.2,cargo-machete@0.9.2
       - name: Check advisories, licenses, duplicates, sources and unused dependencies
@@ -77,14 +77,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: Install pinned Rust toolchain
         run: rustup show active-toolchain
       - name: Install just
-        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad
+        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
         with:
           tool: just@1.58.0
       - name: Require Cargo.toml to be at least the latest release
@@ -96,13 +96,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Install pinned Rust toolchain and LLVM tools
         run: rustup component add llvm-tools-preview
       - name: Install just and coverage tool
-        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad
+        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
         with:
           tool: just@1.58.0,cargo-llvm-cov@0.9.1
       - name: Run tests once with coverage instrumentation
@@ -110,7 +110,7 @@ jobs:
       - name: Enforce 90 percent line coverage
         run: just coverage-check
       - name: Upload coverage report
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage
           path: target/coverage/lcov.info
@@ -123,13 +123,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Install pinned Rust toolchain
         run: rustup show active-toolchain
       - name: Install just
-        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad
+        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
         with:
           tool: just@1.58.0
       - name: Build, smoke test, and package
@@ -137,7 +137,7 @@ jobs:
       - name: Verify crates.io source package without publishing
         run: just publish-check
       - name: Upload verified release bundle
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mdspec-linux-x86_64
           path: dist/

@@ -1,7 +1,10 @@
 use crate::model::{Block, BlockKind, Definition, Document, Link, Position};
 use pulldown_cmark::{BrokenLink, CodeBlockKind, Event, LinkType, Options, Parser, Tag, TagEnd};
 
+const BYTE_ORDER_MARK: char = '\u{FEFF}';
+
 pub fn parse(source: &str) -> Document {
+    let source = source.strip_prefix(BYTE_ORDER_MARK).unwrap_or(source);
     let positions = SourcePositions::new(source);
     let parser = Parser::new_with_broken_link_callback(
         source,
@@ -293,6 +296,14 @@ mod tests {
     use super::parse;
     use crate::model::BlockKind;
     use asserting::prelude::*;
+
+    #[test]
+    fn parses_a_document_that_starts_with_a_byte_order_mark() {
+        let document = parse("\u{FEFF}## Тест\r\n\r\nЯ [нет]\r\n");
+        assert_that!(document.headings[0].0.as_str()).is_equal_to("Тест");
+        assert_that!(document.links[0].position.line).is_equal_to(3);
+        assert_that!(document.links[0].position.column).is_equal_to(3);
+    }
 
     #[test]
     fn treats_lone_carriage_returns_as_line_breaks() {

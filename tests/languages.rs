@@ -14,6 +14,21 @@ fn check(document: &str, config: &str) -> (Option<i32>, Value) {
     (output.status.code(), report)
 }
 
+fn label_error(contents: &str) -> (Option<i32>, String) {
+    let directory = tempfile::tempdir().expect("temporary directory created");
+    let config = directory.path().join("mdspec.toml");
+    std::fs::write(&config, contents).expect("config written");
+    let (code, report) = check(
+        "tests/fixtures/minimal.md",
+        config.to_str().expect("UTF8 temporary path"),
+    );
+    let message = report["diagnostics"][0]["message"]
+        .as_str()
+        .expect("the diagnostic carries a message")
+        .to_owned();
+    (code, message)
+}
+
 #[test]
 fn accepts_custom_english_labels_throughout_the_document() {
     let (code, report) = check(
@@ -59,6 +74,61 @@ fn rejects_blank_labels_before_validation() {
     );
     assert_that!(code).is_equal_to(Some(2));
     assert_that!(report["diagnostics"][0]["rule"].as_str()).is_equal_to(Some("MDS900"));
+    assert_that!(report["diagnostics"][0]["message"].as_str())
+        .is_equal_to(Some("labels.endpoint_prefix must not be empty"));
+}
+
+#[test]
+fn names_the_key_when_a_label_has_surrounding_whitespace() {
+    let (code, message) = label_error("[labels]\nlogic = ' Logic '\n");
+    assert_that!(code).is_equal_to(Some(2));
+    assert_that!(message).is_equal_to("labels.logic must not have surrounding whitespace");
+}
+
+#[test]
+fn names_the_key_when_a_label_spans_multiple_lines() {
+    let (code, message) = label_error("[labels]\nlogic = '''a\nb'''\n");
+    assert_that!(code).is_equal_to(Some(2));
+    assert_that!(message).is_equal_to("labels.logic must not span multiple lines");
+}
+
+#[test]
+fn names_both_keys_when_section_labels_are_duplicated() {
+    let (code, message) = label_error("[labels]\nlogic = 'Same'\ncomponents = 'Same'\n");
+    assert_that!(code).is_equal_to(Some(2));
+    assert_that!(message).is_equal_to("labels.logic and labels.components must differ");
+}
+
+#[test]
+fn names_both_keys_when_non_adjacent_section_labels_are_duplicated() {
+    let (code, message) = label_error("[labels]\nlogic = 'Same'\nreferences = 'Same'\n");
+    assert_that!(code).is_equal_to(Some(2));
+    assert_that!(message).is_equal_to("labels.logic and labels.references must differ");
+}
+
+#[test]
+fn names_both_keys_when_the_source_and_target_labels_are_equal() {
+    let (code, message) = label_error("[labels]\nsource = 'X'\ntarget = 'X'\n");
+    assert_that!(code).is_equal_to(Some(2));
+    assert_that!(message).is_equal_to("labels.source and labels.target must differ");
+}
+
+#[test]
+fn names_both_keys_when_the_request_and_response_labels_are_equal() {
+    let (code, message) = label_error("[labels]\nrequest = 'X'\nresponse = 'X'\n");
+    assert_that!(code).is_equal_to(Some(2));
+    assert_that!(message).is_equal_to("labels.request and labels.response must differ");
+}
+
+#[test]
+fn reports_every_invalid_label_in_one_diagnostic() {
+    let (code, message) =
+        label_error("[labels]\nendpoint_prefix = ' '\nrequest = 'X'\nresponse = 'X'\n");
+    assert_that!(code).is_equal_to(Some(2));
+    assert_that!(message).is_equal_to(
+        "labels.endpoint_prefix must not have surrounding whitespace; \
+         labels.request and labels.response must differ",
+    );
 }
 
 #[test]

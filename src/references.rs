@@ -18,12 +18,7 @@ struct Validation<'a> {
     diagnostics: Vec<Diagnostic>,
 }
 
-pub fn validate(
-    document: &Document,
-    path: &Path,
-    config: &Config,
-    strict: bool,
-) -> Vec<Diagnostic> {
+pub fn validate(document: &Document, path: &Path, config: &Config) -> Vec<Diagnostic> {
     let mut validation = Validation {
         document,
         path,
@@ -33,7 +28,7 @@ pub fn validate(
     };
     validation.placement();
     validation.links();
-    validation.definitions(strict);
+    validation.definitions();
     validation.diagnostics
 }
 
@@ -66,7 +61,7 @@ impl Validation<'_> {
         }
     }
 
-    fn definitions(&mut self, strict: bool) {
+    fn definitions(&mut self) {
         let used: HashSet<&str> = self
             .document
             .links
@@ -74,7 +69,7 @@ impl Validation<'_> {
             .filter_map(|link| link.key.as_deref())
             .collect();
         for definition in &self.document.definitions {
-            if strict && !used.contains(definition.key.as_str()) {
+            if !used.contains(definition.key.as_str()) {
                 let mut diagnostic = Diagnostic::error(
                     Rule::Mds016,
                     self.path,

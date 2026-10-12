@@ -59,7 +59,7 @@ fn check(
             Ok(source) => {
                 let document = parser::parse(&source);
                 diagnostics.extend(rules::validate(&document, &file, &config));
-                diagnostics.extend(references::validate(&document, &file, &config, strict));
+                diagnostics.extend(references::validate(&document, &file, &config));
                 files_checked += 1;
             }
             Err(error) => diagnostics.push(Diagnostic::error(
@@ -98,12 +98,13 @@ fn load_config(path: Option<&Path>) -> Result<Config, Box<Diagnostic>> {
             format!("Invalid TOML configuration: {error}"),
         ))
     })?;
-    if !config.labels.is_valid() {
+    let label_errors = config.labels.validation_errors();
+    if !label_errors.is_empty() {
         return Err(Box::new(Diagnostic::error(
             Rule::Mds900,
             path,
             None,
-            "Labels must be nonempty single-line strings without surrounding whitespace; section labels must be distinct, and source and target labels must differ",
+            label_errors.join("; "),
         )));
     }
     Ok(config)
