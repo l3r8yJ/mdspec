@@ -1,0 +1,1 @@
+Throwaway probe for task 20261011-131719. Its only change lives under tasks/, so the changes job must report code=false and every gated job, including Duplication, must report skipped. Closed and deleted immediately after.
