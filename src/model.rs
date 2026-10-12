@@ -18,6 +18,7 @@ pub enum BlockKind {
     Paragraph,
     Heading(u8),
     Table(Vec<Vec<String>>),
+    Code,
     Content,
     Definition,
 }
@@ -34,6 +35,7 @@ pub struct Link {
     pub key: Option<String>,
     pub url: Option<String>,
     pub position: Position,
+    pub table_of_contents: bool,
 }
 
 #[derive(Debug, Default)]
