@@ -43,7 +43,7 @@ jobs:
   mutation:
     name: Detect missed mutations
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:

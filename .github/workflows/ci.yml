@@ -46,7 +46,7 @@ jobs:
   format:
     name: Formatting
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -83,7 +83,7 @@ jobs:
   dependencies:
     name: Dependencies
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -102,7 +102,7 @@ jobs:
   version:
     name: Version
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
