@@ -65,6 +65,7 @@ jobs:
   clippy:
     name: Strict Clippy
     needs: format
+    if: ${{ !cancelled() && needs.format.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -122,6 +123,7 @@ jobs:
   test:
     name: Tests and coverage
     needs: clippy
+    if: ${{ !cancelled() && needs.clippy.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -149,6 +151,7 @@ jobs:
   build:
     name: Release build
     needs: test
+    if: ${{ !cancelled() && needs.test.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
