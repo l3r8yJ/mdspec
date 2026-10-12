@@ -4,15 +4,21 @@ use asserting::prelude::*;
 use serde_json::Value;
 use std::process::Command;
 
-fn check(file: &str, strict: bool) -> (Option<i32>, Value) {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_mdspec"));
-    command.args(["check", file, "--format", "json"]);
-    if strict {
-        command.arg("--strict");
-    }
-    let output = command.output().expect("built binary starts");
+fn run(arguments: &[&str]) -> (Option<i32>, Value) {
+    let output = Command::new(env!("CARGO_BIN_EXE_mdspec"))
+        .args(arguments)
+        .output()
+        .expect("built binary starts");
     let json = serde_json::from_slice(&output.stdout).expect("stdout contains JSON diagnostics");
     (output.status.code(), json)
+}
+
+fn check(file: &str, strict: bool) -> (Option<i32>, Value) {
+    let mut arguments = vec!["check", file, "--format", "json"];
+    if strict {
+        arguments.push("--strict");
+    }
+    run(&arguments)
 }
 
 #[test]
@@ -71,21 +77,43 @@ fn rejects_nonterminal_and_misplaced_definitions() {
 }
 
 #[test]
-fn strict_mode_rejects_unused_definitions() {
-    let (normal_code, normal) = check("tests/fixtures/references/unused.md", false);
-    let (strict_code, strict) = check("tests/fixtures/references/unused.md", true);
-    assert_that!(normal_code).is_equal_to(Some(0));
-    assert_that!(strict_code).is_equal_to(Some(1));
-    assert_that!(
-        normal["diagnostics"]
-            .as_array()
-            .expect("normal diagnostics")
-            .len()
-    )
-    .is_equal_to(0);
-    let diagnostics = strict["diagnostics"]
-        .as_array()
-        .expect("strict diagnostics");
+fn warns_about_unused_definitions_without_strict() {
+    let (code, json) = check("tests/fixtures/references/unused.md", false);
+    let diagnostics = json["diagnostics"].as_array().expect("diagnostics array");
+    assert_that!(code).is_equal_to(Some(0));
+    assert_that!(json["error_count"].as_u64()).is_equal_to(Some(0));
+    assert_that!(json["warning_count"].as_u64()).is_equal_to(Some(1));
+    assert_that!(diagnostics.len()).is_equal_to(1);
+    assert_that!(diagnostics[0]["rule"].as_str()).is_equal_to(Some("MDS016"));
+    assert_that!(diagnostics[0]["severity"].as_str()).is_equal_to(Some("warning"));
+}
+
+#[test]
+fn strict_promotes_unused_definition_warnings_to_errors() {
+    let (code, json) = check("tests/fixtures/references/unused.md", true);
+    let diagnostics = json["diagnostics"].as_array().expect("diagnostics array");
+    assert_that!(code).is_equal_to(Some(1));
+    assert_that!(json["error_count"].as_u64()).is_equal_to(Some(1));
+    assert_that!(json["warning_count"].as_u64()).is_equal_to(Some(0));
+    assert_that!(diagnostics.len()).is_equal_to(1);
+    assert_that!(diagnostics[0]["rule"].as_str()).is_equal_to(Some("MDS016"));
+    assert_that!(diagnostics[0]["severity"].as_str()).is_equal_to(Some("error"));
+}
+
+#[test]
+fn configuration_promotes_unused_definition_warnings_to_errors() {
+    let (code, json) = run(&[
+        "check",
+        "tests/fixtures/references/unused.md",
+        "--format",
+        "json",
+        "--config",
+        "tests/fixtures/references/warnings_as_errors.toml",
+    ]);
+    let diagnostics = json["diagnostics"].as_array().expect("diagnostics array");
+    assert_that!(code).is_equal_to(Some(1));
+    assert_that!(json["error_count"].as_u64()).is_equal_to(Some(1));
+    assert_that!(json["warning_count"].as_u64()).is_equal_to(Some(0));
     assert_that!(diagnostics.len()).is_equal_to(1);
     assert_that!(diagnostics[0]["rule"].as_str()).is_equal_to(Some("MDS016"));
     assert_that!(diagnostics[0]["severity"].as_str()).is_equal_to(Some("error"));
