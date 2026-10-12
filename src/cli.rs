@@ -26,7 +26,7 @@ pub enum Command {
             help = "Exclude matching files and directory subtrees; repeatable"
         )]
         exclude: Vec<String>,
-        #[arg(long, help = "Report unused definitions and treat warnings as errors")]
+        #[arg(long, help = "Treat warnings as errors")]
         strict: bool,
         #[arg(long, value_enum, default_value = "text")]
         format: Format,

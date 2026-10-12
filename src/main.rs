@@ -59,7 +59,7 @@ fn check(
             Ok(source) => {
                 let document = parser::parse(&source);
                 diagnostics.extend(rules::validate(&document, &file, &config));
-                diagnostics.extend(references::validate(&document, &file, &config, strict));
+                diagnostics.extend(references::validate(&document, &file, &config));
                 files_checked += 1;
             }
             Err(error) => diagnostics.push(Diagnostic::error(

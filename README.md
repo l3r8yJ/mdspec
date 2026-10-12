@@ -63,12 +63,12 @@ mdspec check docs/ --strict --format json
 - Quote globs. `*` stays within one folder, `**` crosses folders.
 - `--exclude` is repeatable and always wins.
 - Folders are scanned for `.md` files, respecting `.gitignore` and `.ignore`.
-- `--strict` reports unused link definitions and turns warnings into errors.
+- `--strict` turns warnings into errors.
 - `--format json` prints a report to stdout. Match on `rule` IDs, not messages.
 
 Exit codes:
 
-- `0` clean
+- `0` clean, or warnings only
 - `1` rule violations
 - `2` bad arguments, config, or input (wins over `1`)
 
@@ -83,6 +83,7 @@ Only a file passed with `--config` is read. Unknown keys are errors. All keys an
 - `references.require_reference_style = false` allows inline local links.
 - `references.definitions_at_end = false` allows definitions anywhere.
 - `references.toc_allowed = true` accepts a paragraph that is only `[TOC]` or `[[_TOC_]]` as a table of contents marker instead of an undefined reference.
+- `diagnostics.warnings_as_errors = true` turns warnings into errors, exactly like `--strict`.
 
 ## Rules
 
@@ -345,7 +346,7 @@ Incorrect:
 
 ### MDS016 Unused definitions
 
-Only with `--strict`.
+Reported as a warning, so a run without `--strict` still exits `0`. `--strict` or `diagnostics.warnings_as_errors = true` turns it into an error.
 
 Correct:
 
