@@ -69,6 +69,9 @@ deps:
     cargo deny --locked check
     cargo machete
 
+duplication:
+    npx --yes jscpd@4.3.0 src tests --format rust --min-tokens 50 --threshold 1.5 --noTips
+
 verify-version:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -89,6 +92,6 @@ verify-tag:
         exit 1
     fi
 
-ci: fmt-check clippy deps verify-version coverage package publish-check
+ci: fmt-check clippy deps duplication verify-version coverage package publish-check
 
 full: ci mutate
