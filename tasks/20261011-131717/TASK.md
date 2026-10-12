@@ -1,6 +1,6 @@
 # Install a prebuilt just in the Rultor image
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 60
 - TAGS: ci,v0.1.4
 

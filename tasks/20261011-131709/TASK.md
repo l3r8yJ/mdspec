@@ -1,6 +1,6 @@
 # Strip a leading UTF-8 BOM before parsing a document
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 10
 - TAGS: bug,v0.1.4
 
