@@ -1,6 +1,6 @@
 # Automate dependency and action updates
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 60
 - TAGS: ci,v0.1.4
 

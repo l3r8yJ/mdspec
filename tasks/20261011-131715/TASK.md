@@ -1,6 +1,6 @@
 # Replace rule ID string literals with a Rule enum
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 50
 - TAGS: refactor,v0.1.4
 
