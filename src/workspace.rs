@@ -1,6 +1,7 @@
 mod pattern;
 
 use crate::diagnostics::Diagnostic;
+use crate::rule::Rule;
 use ignore::WalkBuilder;
 use pattern::{Pattern, has_magic, normalize};
 use std::collections::BTreeMap;
@@ -37,7 +38,7 @@ pub fn discover(inputs: &[PathBuf], exclude: &[String]) -> (Vec<PathBuf>, Vec<Di
     }
     if discovery.files.is_empty() && discovery.diagnostics.is_empty() {
         discovery.issue(
-            "MDS902",
+            Rule::Mds902,
             Path::new("."),
             "No Markdown files remain after exclusions",
         );
@@ -65,7 +66,7 @@ impl Discovery {
         match fs::metadata(input) {
             Ok(metadata) if metadata.is_file() => self.file(input, exclusions),
             Ok(metadata) if metadata.is_dir() => self.add_scan(input, None),
-            Ok(_) => self.issue("MDS902", input, "Expected a regular file or directory"),
+            Ok(_) => self.issue(Rule::Mds902, input, "Expected a regular file or directory"),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound && has_magic(input) => {
                 match Pattern::compile(input) {
                     Ok(pattern) => self.add_scan(input, Some(pattern)),
@@ -73,7 +74,7 @@ impl Discovery {
                 }
             }
             Err(error) => self.issue(
-                "MDS901",
+                Rule::Mds901,
                 input,
                 format!("Could not open input path: {error}"),
             ),
@@ -84,10 +85,14 @@ impl Discovery {
         match normalize(input) {
             Ok(path) if excluded(&path, exclusions) => (),
             Ok(_) if !is_markdown(input) => {
-                self.issue("MDS902", input, "Expected a file with the .md extension");
+                self.issue(
+                    Rule::Mds902,
+                    input,
+                    "Expected a file with the .md extension",
+                );
             }
             Ok(_) => self.insert(input),
-            Err(error) => self.issue("MDS901", input, error.to_string()),
+            Err(error) => self.issue(Rule::Mds901, input, error.to_string()),
         }
     }
 
@@ -114,7 +119,7 @@ impl Discovery {
                     pattern,
                     matched: false,
                 }),
-            Err(error) => self.issue("MDS901", input, error.to_string()),
+            Err(error) => self.issue(Rule::Mds901, input, error.to_string()),
         }
     }
 
@@ -144,13 +149,13 @@ impl Discovery {
                     if matched && !excluded(entry.path(), exclusions) {
                         match entry.path().strip_prefix(root) {
                             Ok(relative) => self.insert(&scan.display_root.join(relative)),
-                            Err(error) => self.issue("MDS901", entry.path(), error.to_string()),
+                            Err(error) => self.issue(Rule::Mds901, entry.path(), error.to_string()),
                         }
                     }
                 }
                 Ok(_) => (),
                 Err(error) => self.issue(
-                    "MDS901",
+                    Rule::Mds901,
                     root,
                     format!("Could not traverse directory: {error}"),
                 ),
@@ -163,7 +168,7 @@ impl Discovery {
                 .filter(|selection| !selection.matched)
             {
                 self.issue(
-                    "MDS902",
+                    Rule::Mds902,
                     &selection.input,
                     "No Markdown files matched this input",
                 );
@@ -178,11 +183,11 @@ impl Discovery {
                     .entry(identity)
                     .or_insert_with(|| path.to_path_buf());
             }
-            Err(error) => self.issue("MDS901", path, error.to_string()),
+            Err(error) => self.issue(Rule::Mds901, path, error.to_string()),
         }
     }
 
-    fn issue(&mut self, rule: &'static str, path: &Path, message: impl Into<String>) {
+    fn issue(&mut self, rule: Rule, path: &Path, message: impl Into<String>) {
         self.diagnostics
             .push(Diagnostic::error(rule, path, None, message));
     }

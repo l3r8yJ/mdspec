@@ -15,13 +15,20 @@ pub struct Report {
 impl Report {
     pub fn new(files_checked: usize, mut diagnostics: Vec<Diagnostic>) -> Self {
         diagnostics.sort_by(|left, right| {
-            (&left.file, left.line, left.column, left.rule, &left.message).cmp(&(
-                &right.file,
-                right.line,
-                right.column,
-                right.rule,
-                &right.message,
-            ))
+            (
+                &left.file,
+                left.line,
+                left.column,
+                left.rule.as_str(),
+                &left.message,
+            )
+                .cmp(&(
+                    &right.file,
+                    right.line,
+                    right.column,
+                    right.rule.as_str(),
+                    &right.message,
+                ))
         });
         Self {
             schema_version: 1,
@@ -41,7 +48,7 @@ impl Report {
         if self
             .diagnostics
             .iter()
-            .any(|item| matches!(item.rule, "MDS900" | "MDS901" | "MDS902"))
+            .any(|item| item.rule.is_operational())
         {
             2
         } else {
