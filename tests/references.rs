@@ -1,29 +1,13 @@
 #![cfg(test)]
 
+mod common;
+
 use asserting::prelude::*;
-use serde_json::Value;
-use std::process::Command;
-
-fn run(arguments: &[&str]) -> (Option<i32>, Value) {
-    let output = Command::new(env!("CARGO_BIN_EXE_mdspec"))
-        .args(arguments)
-        .output()
-        .expect("built binary starts");
-    let json = serde_json::from_slice(&output.stdout).expect("stdout contains JSON diagnostics");
-    (output.status.code(), json)
-}
-
-fn check(file: &str, strict: bool) -> (Option<i32>, Value) {
-    let mut arguments = vec!["check", file, "--format", "json"];
-    if strict {
-        arguments.push("--strict");
-    }
-    run(&arguments)
-}
+use common::check_fixture;
 
 #[test]
 fn resolves_normalized_references_and_unicode_duplicate_anchors() {
-    let (code, json) = check("tests/fixtures/references/valid.md", true);
+    let (code, json) = check_fixture("tests/fixtures/references/valid.md", true);
     assert_that!(code).is_equal_to(Some(0));
     assert_that!(
         json["diagnostics"]
@@ -36,14 +20,9 @@ fn resolves_normalized_references_and_unicode_duplicate_anchors() {
 
 #[test]
 fn reports_all_reference_failures_and_strict_unused_definitions() {
-    let (code, json) = check("tests/fixtures/references/invalid.md", true);
+    let (code, json) = check_fixture("tests/fixtures/references/invalid.md", true);
     assert_that!(code).is_equal_to(Some(1));
-    let rules: Vec<&str> = json["diagnostics"]
-        .as_array()
-        .expect("diagnostics array")
-        .iter()
-        .filter_map(|item| item["rule"].as_str())
-        .collect();
+    let rules = common::rules(&json);
     for rule in ["MDS011", "MDS012", "MDS013", "MDS014", "MDS016"] {
         assert_that!(rules.contains(&rule)).is_equal_to(true);
     }
@@ -51,7 +30,7 @@ fn reports_all_reference_failures_and_strict_unused_definitions() {
 
 #[test]
 fn resolves_encoded_fragments_queries_and_same_file_links() {
-    let (code, json) = check("tests/fixtures/references/encoded.md", true);
+    let (code, json) = check_fixture("tests/fixtures/references/encoded.md", true);
     assert_that!(code).is_equal_to(Some(0));
     assert_that!(
         json["diagnostics"]
@@ -64,7 +43,7 @@ fn resolves_encoded_fragments_queries_and_same_file_links() {
 
 #[test]
 fn resolves_suffixed_anchors_for_repeated_headings() {
-    let (code, json) = check("tests/fixtures/references/duplicates.md", true);
+    let (code, json) = check_fixture("tests/fixtures/references/duplicates.md", true);
     assert_that!(code).is_equal_to(Some(0));
     assert_that!(
         json["diagnostics"]
@@ -77,7 +56,7 @@ fn resolves_suffixed_anchors_for_repeated_headings() {
 
 #[test]
 fn rejects_nonterminal_and_misplaced_definitions() {
-    let (code, json) = check("tests/fixtures/references/placement.md", false);
+    let (code, json) = check_fixture("tests/fixtures/references/placement.md", false);
     assert_that!(code).is_equal_to(Some(1));
     let diagnostics = json["diagnostics"].as_array().expect("diagnostics array");
     assert_that!(diagnostics.iter().any(|item| item["rule"] == "MDS015")).is_equal_to(true);
@@ -91,7 +70,7 @@ fn rejects_nonterminal_and_misplaced_definitions() {
 
 #[test]
 fn warns_about_unused_definitions_without_strict() {
-    let (code, json) = check("tests/fixtures/references/unused.md", false);
+    let (code, json) = check_fixture("tests/fixtures/references/unused.md", false);
     let diagnostics = json["diagnostics"].as_array().expect("diagnostics array");
     assert_that!(code).is_equal_to(Some(0));
     assert_that!(json["error_count"].as_u64()).is_equal_to(Some(0));
@@ -103,7 +82,7 @@ fn warns_about_unused_definitions_without_strict() {
 
 #[test]
 fn strict_promotes_unused_definition_warnings_to_errors() {
-    let (code, json) = check("tests/fixtures/references/unused.md", true);
+    let (code, json) = check_fixture("tests/fixtures/references/unused.md", true);
     let diagnostics = json["diagnostics"].as_array().expect("diagnostics array");
     assert_that!(code).is_equal_to(Some(1));
     assert_that!(json["error_count"].as_u64()).is_equal_to(Some(1));
@@ -115,7 +94,7 @@ fn strict_promotes_unused_definition_warnings_to_errors() {
 
 #[test]
 fn configuration_promotes_unused_definition_warnings_to_errors() {
-    let (code, json) = run(&[
+    let (code, json) = common::report(&[
         "check",
         "tests/fixtures/references/unused.md",
         "--format",
