@@ -1,6 +1,6 @@
 # Clean stale coverage profiles before measuring coverage
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 55
 - TAGS: ci,v0.1.4
 
