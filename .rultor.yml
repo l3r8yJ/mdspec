@@ -6,9 +6,15 @@ assets:
   credentials: l3r8yJ/home#assets/crates-credentials
 
 install: |
+  set -euo pipefail
   apt-get update
   apt-get install -y --no-install-recommends jq
-  cargo install just --version 1.58.0 --locked
+  just_version=1.58.0
+  just_archive="just-${just_version}-x86_64-unknown-linux-musl.tar.gz"
+  curl --fail --silent --show-error --location --retry 2 --output "/tmp/${just_archive}" "https://github.com/casey/just/releases/download/${just_version}/${just_archive}"
+  echo "4a5cc2f53e6f0f8c59092a6cc38291eb729d46a7dd95d3ae582008881b84931d  /tmp/${just_archive}" | sha256sum --check --strict || { echo "just ${just_version} archive checksum mismatch" >&2; exit 1; }
+  tar --extract --file "/tmp/${just_archive}" --directory /usr/local/bin just
+  just --version
 
 release:
   script: |
