@@ -1,6 +1,6 @@
 # Add quality gates to CI and repository settings
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 50
 - TAGS: enhancement,v0.1.4
 
