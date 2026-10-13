@@ -465,4 +465,4 @@ just full
 
 `just full` runs everything CI runs, plus mutation testing. It needs committed files and publishes nothing.
 
-To release, open a PR that runs `just set-version X.Y.Z` and closes the release task, merge it, then comment `` @rultor release tag is `vX.Y.Z` `` on that PR. CI fails while `Cargo.toml` is behind the latest tag.
+To release, open a PR that closes the release task and switches the released version to `shipped` in [tasks/tags](tasks/tags), merge it, then comment `` @rultor release tag is `vX.Y.Z` `` on that PR. Rultor takes the version from that message, sets it in `Cargo.toml` and `Cargo.lock`, commits the bump on the merged commit, pushes that commit to `main` and only then publishes to crates.io and tags it. Releasing a version that is already on crates.io is rejected there. CI fails while `Cargo.toml` is behind the latest tag.
