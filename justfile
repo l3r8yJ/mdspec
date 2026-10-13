@@ -72,16 +72,20 @@ deps:
 duplication:
     npx --yes jscpd@4.3.0 src tests --format rust --min-tokens 50 --threshold 1.5 --noTips
 
-release-bump tag:
+release-bump:
     #!/usr/bin/env bash
     set -euo pipefail
-    release_tag="{{ tag }}"
+    release_tag="${RELEASE_TAG:?RELEASE_TAG must hold the release tag, for example v1.2.3}"
     [[ "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Release tag ${release_tag} must look like v1.2.3" >&2; exit 1; }
     version="${release_tag#v}"
     current=$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "mdspec") | .version')
     if [[ "$current" == "$version" ]]; then
         echo "Cargo.toml already holds ${version}, nothing to bump"
         exit 0
+    fi
+    if [[ "$(printf '%s\n%s\n' "$current" "$version" | sort -V | tail -n 1)" != "$version" ]]; then
+        echo "Release tag ${release_tag} is older than Cargo.toml version ${current}" >&2
+        exit 1
     fi
     just set-version "$version"
     git add Cargo.toml Cargo.lock
