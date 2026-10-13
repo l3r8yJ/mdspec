@@ -3,7 +3,7 @@
 mod common;
 
 use asserting::prelude::*;
-use common::{Workspace, rule};
+use common::{Workspace, rule, rule_count};
 
 const SINGLE: &str = "[document]\nmultiple_endpoints = false\n";
 const ENDPOINT: &str = "## Эндпоинт: А\n\nPath: `GET /a`\n\n### Логика работы\n\nТекст [a][a].\n\n";
@@ -144,4 +144,25 @@ fn ignores_a_document_level_references_heading_for_a_single_endpoint() {
     let document = format!("{ENDPOINT}## Ссылки\n\n[a]: #эндпоинт-а\n");
     let workspace = Workspace::new();
     assert_that!(workspace.check_rules(&document, SINGLE, true)).contains(rule("MDS015", 7));
+}
+
+#[test]
+fn rejects_a_second_endpoint_even_when_both_names_are_valid() {
+    let document = format!(
+        "{}\n## Эндпоинт: Второй\n",
+        include_str!("fixtures/minimal.md")
+    );
+    let workspace = Workspace::new();
+    let (_, report) =
+        workspace.check_document(&document, "[document]\nmultiple_endpoints = false\n", false);
+    assert_that!(rule_count(&report, "MDS001")).is_equal_to(1);
+}
+
+#[test]
+fn reports_missing_endpoint_path_and_logic_together_for_a_single_endpoint() {
+    let workspace = Workspace::new();
+    let (_, report) =
+        workspace.check_document("", "[document]\nmultiple_endpoints = false\n", false);
+    assert_that!(["MDS001", "MDS002", "MDS003"].map(|rule| rule_count(&report, rule)))
+        .is_equal_to([1, 1, 1]);
 }
