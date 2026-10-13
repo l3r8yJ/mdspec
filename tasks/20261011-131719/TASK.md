@@ -1,6 +1,6 @@
 # Fail CI on code duplication
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 55
 - TAGS: ci,v0.1.4
 
