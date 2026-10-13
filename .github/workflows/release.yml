@@ -24,6 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - name: Install pinned Rust toolchain
         run: rustup show active-toolchain
@@ -35,23 +36,33 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: just verify-tag
-      - name: Find and await CI for the tagged main commit
+      - name: Find and await CI for the commit the release is cut from
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          commit_sha=$(git rev-parse HEAD)
+          if git merge-base --is-ancestor HEAD origin/main; then
+            released_sha=$(git rev-parse HEAD)
+          elif git rev-parse --verify --quiet HEAD^ > /dev/null; then
+            released_sha=$(git rev-parse HEAD^)
+          else
+            released_sha=
+          fi
+          if [[ -z "$released_sha" ]] || ! git merge-base --is-ancestor "$released_sha" origin/main; then
+            echo "Tag ${GITHUB_REF_NAME} is not cut from main, refusing to release it." >&2
+            exit 1
+          fi
           run_id=
           for attempt in $(seq 1 20); do
-            run_id=$(gh run list --workflow ci.yml --commit "$commit_sha" --branch main --event push --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+            run_id=$(gh run list --workflow ci.yml --commit "$released_sha" --branch main --event push --limit 1 --json databaseId --jq '.[0].databaseId // empty' || true)
             if [[ -n "$run_id" ]]; then
               break
             fi
-            echo "No ci.yml run visible for ${commit_sha} yet (attempt ${attempt}/20), waiting"
+            echo "No ci.yml run visible for ${released_sha} yet (attempt ${attempt}/20), waiting"
             sleep 15
           done
           if [[ -z "$run_id" ]]; then
-            echo 'No main-branch push CI run exists for this commit. Merge it and run CI before tagging.' >&2
+            echo "No main-branch push CI run exists for ${released_sha}. Merge it and run CI before tagging." >&2
             exit 1
           fi
           gh run watch "$run_id" --exit-status --interval 10
