@@ -41,7 +41,15 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           commit_sha=$(git rev-parse HEAD)
-          run_id=$(gh run list --workflow ci.yml --commit "$commit_sha" --branch main --event push --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          run_id=
+          for attempt in $(seq 1 20); do
+            run_id=$(gh run list --workflow ci.yml --commit "$commit_sha" --branch main --event push --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+            if [[ -n "$run_id" ]]; then
+              break
+            fi
+            echo "No ci.yml run visible for ${commit_sha} yet (attempt ${attempt}/20), waiting"
+            sleep 15
+          done
           if [[ -z "$run_id" ]]; then
             echo 'No main-branch push CI run exists for this commit. Merge it and run CI before tagging.' >&2
             exit 1
