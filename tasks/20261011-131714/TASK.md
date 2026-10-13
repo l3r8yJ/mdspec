@@ -1,6 +1,6 @@
 # Name the mutation test files after the behavior they check
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 45
 - TAGS: refactor,v0.1.4
 
