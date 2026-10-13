@@ -1,6 +1,6 @@
 # bump version on rultor release
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 110
 - TAGS: ci,v0.2.0
 

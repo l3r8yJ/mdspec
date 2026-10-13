@@ -72,16 +72,26 @@ deps:
 duplication:
     npx --yes jscpd@4.3.0 src tests --format rust --min-tokens 50 --threshold 1.5 --noTips
 
-verify-version:
+release-bump:
     #!/usr/bin/env bash
     set -euo pipefail
-    version=$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "mdspec") | .version')
+    release_tag="${RELEASE_TAG:?RELEASE_TAG must hold the release tag, for example v1.2.3}"
+    [[ "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Release tag ${release_tag} must look like v1.2.3" >&2; exit 1; }
+    version="${release_tag#v}"
     latest=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
     latest="${latest#v}"
-    if [[ -n "$latest" && "$(printf '%s\n%s\n' "$latest" "$version" | sort -V | head -n 1)" != "$latest" ]]; then
-        echo "Cargo.toml version ${version} is behind the latest release v${latest}" >&2
+    if [[ -n "$latest" && "$(printf '%s\n%s\n' "$latest" "$version" | sort -V | tail -n 1)" != "$version" ]]; then
+        echo "Release tag ${release_tag} is not newer than the latest release v${latest}" >&2
         exit 1
     fi
+    current=$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "mdspec") | .version')
+    if [[ "$current" == "$version" ]]; then
+        echo "Cargo.toml already holds ${version}, nothing to bump"
+        exit 0
+    fi
+    just set-version "$version"
+    git add Cargo.toml Cargo.lock
+    git -c user.name=rultor -c user.email=rultor@localhost commit --message "chore: bump version to ${release_tag}"
 
 verify-tag:
     #!/usr/bin/env bash
@@ -92,6 +102,6 @@ verify-tag:
         exit 1
     fi
 
-ci: fmt-check clippy deps duplication verify-version coverage package publish-check
+ci: fmt-check clippy deps duplication coverage package publish-check
 
 full: ci mutate

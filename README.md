@@ -442,6 +442,8 @@ mdspec check docs/notes.txt
 
 Every task is also tagged with the release that ships it, e.g. `v0.1.3`, and that tag is added to `tasks/tags`. `tatr ls -c :v0.1.3` lists what a release contains. New tasks get the next version tag, marked `planned` in `tasks/tags` until that release ships, then `shipped`.
 
+`Cargo.toml` carries `0.0.0` on `main`: the released version is written by the release run, so the tag is the only place it lives.
+
 ## Contributing
 
 Tasks live in [tasks/](tasks) in the [tatr](https://github.com/tsoding/tatr) layout: one `tasks/<YYYYMMDD-HHMMSS>/TASK.md` per task, with the time in UTC. Tags are described in [tasks/tags](tasks/tags). Reference the task ID in commits and PRs.
@@ -464,5 +466,3 @@ just full
 ```
 
 `just full` runs everything CI runs, plus mutation testing. It needs committed files and publishes nothing.
-
-To release, open a PR that runs `just set-version X.Y.Z` and closes the release task, merge it, then comment `` @rultor release tag is `vX.Y.Z` `` on that PR. CI fails while `Cargo.toml` is behind the latest tag.
