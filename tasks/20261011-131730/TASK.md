@@ -1,7 +1,7 @@
 # Link each diagnostic to its rule documentation
 
 - STATUS: OPEN
-- PRIORITY: 70
+- PRIORITY: 90
 - TAGS: enhancement,v0.2.0
 
 ## Problem

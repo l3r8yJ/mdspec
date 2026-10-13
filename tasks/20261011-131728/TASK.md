@@ -1,7 +1,7 @@
 # Provide a pre-commit hook
 
 - STATUS: OPEN
-- PRIORITY: 85
+- PRIORITY: 50
 - TAGS: enhancement,v0.2.0
 
 ## Problem

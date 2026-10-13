@@ -1,7 +1,7 @@
 # Report duplicate endpoint paths
 
 - STATUS: OPEN
-- PRIORITY: 55
+- PRIORITY: 100
 - TAGS: enhancement,v0.2.0
 
 ## Problem
