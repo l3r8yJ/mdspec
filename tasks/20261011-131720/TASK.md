@@ -1,7 +1,7 @@
 # Print text diagnostics to stdout
 
 - STATUS: OPEN
-- PRIORITY: 60
+- PRIORITY: 95
 - TAGS: enhancement,v0.2.0
 
 ## Problem
