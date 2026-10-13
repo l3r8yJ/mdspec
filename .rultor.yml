@@ -4,7 +4,6 @@ docker:
 
 assets:
   credentials: l3r8yJ/home#assets/crates-credentials
-  push-token: l3r8yJ/home#assets/mdspec/push-token
 
 install: |
   set -euo pipefail
@@ -25,21 +24,12 @@ release:
     ci_run=$(curl --fail --silent --show-error --connect-timeout 10 --max-time 30 --retry 2 --get --data-urlencode "head_sha=$base_sha" --data-urlencode branch=main --data-urlencode event=push --data-urlencode per_page=1 https://api.github.com/repos/l3r8yJ/mdspec/actions/workflows/ci.yml/runs)
     jq --exit-status --arg sha "$base_sha" '.workflow_runs[0] | .head_sha == $sha and .head_branch == "main" and .event == "push" and .status == "completed" and .conclusion == "success"' <<< "$ci_run" > /dev/null || { echo 'Release requires successful main push CI for this exact commit.' >&2; exit 1; }
     just release-bump
-    release_sha=$(git rev-parse HEAD)
-    if [[ "$release_sha" != "$base_sha" ]]; then
-      test -s ../push-token || { echo 'The push-token asset is missing or empty: l3r8yJ/home#assets/mdspec/push-token.' >&2; exit 1; }
-      credential_file=$(mktemp)
-      trap 'rm -f -- "${credential_file:-}"' EXIT
-      chmod 600 "$credential_file"
-      printf 'https://x-access-token:%s@github.com\n' "$(cat ../push-token)" > "$credential_file"
-      GIT_TERMINAL_PROMPT=0 git -c credential.helper="store --file=${credential_file}" push https://github.com/l3r8yJ/mdspec.git HEAD:main
-    fi
     just verify-tag
     cargo_directory="${CARGO_HOME:-$HOME/.cargo}"
     credential_path="$cargo_directory/credentials.toml"
     [[ ! -e "$credential_path" && ! -e "$cargo_directory/credentials" ]] || { echo 'Refusing to overwrite existing Cargo credentials.' >&2; exit 1; }
-    test -s ../credentials
+    test -s ../credentials || { echo 'The credentials asset is missing or empty: l3r8yJ/home#assets/crates-credentials.' >&2; exit 1; }
     mkdir -p "$cargo_directory"
-    trap 'rm -f -- "${credential_file:-}" "$credential_path"' EXIT
+    trap 'rm -f -- "$credential_path"' EXIT
     install -m 600 ../credentials "$credential_path"
     just publish
