@@ -8,7 +8,7 @@ use crate::diagnostics::Diagnostic;
 use crate::model::{BlockKind, Document, Position};
 use crate::references::{heading_anchors, is_local, percent_decode};
 use crate::rule::Rule;
-use crate::rules::{children, endpoint_name, is_general_components};
+use crate::rules::{children, endpoint_name, is_general_components, is_general_references};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Scope {
@@ -119,7 +119,9 @@ fn declared<'a>(path: &'a Path, document: &'a Document, config: &Config) -> Vec<
         };
         let section = children(&document.blocks, index, level - 1);
         for (offset, heading) in section.iter().enumerate() {
-            if !matches!(heading.kind, BlockKind::Heading(depth) if depth == level) {
+            if !matches!(heading.kind, BlockKind::Heading(depth) if depth == level)
+                || is_general_references(heading, level, &config.labels)
+            {
                 continue;
             }
             let Some(anchor) = document

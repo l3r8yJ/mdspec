@@ -270,3 +270,32 @@ fn rejects_an_empty_description_followed_by_a_sibling_heading_with_text() {
     assert_that!(workspace.check_rules(&document, "", true))
         .is_equal_to(vec![rule("MDS008", 13), rule("MDS005", 15)]);
 }
+
+#[test]
+fn treats_a_references_heading_inside_the_general_section_as_the_definitions_block() {
+    let workspace = Workspace::new();
+    let document = format!("{LINKED}{GENERAL}### Ссылки\n\n[check]: #проверка-прав\n");
+    assert_that!(workspace.check_rules(&document, "", true)).is_empty();
+}
+
+#[test]
+fn still_checks_an_internal_component_named_like_the_references_block() {
+    let workspace = Workspace::new();
+    let owner = OWNER.replace(
+        "#### Загрузка\n\n##### Описание\n\nЗагрузить данные.\n\n",
+        "#### Ссылки\n\nТекст.\n\n",
+    );
+    let borrower = BORROWER.replace("Загрузить", "Ссылки");
+    let document = format!("{owner}{borrower}## Ссылки\n\n[load]: #ссылки\n");
+    assert_that!(workspace.check_rule_names(&document, "", true)).contains("MDS008".to_owned());
+}
+
+#[test]
+fn reports_an_internal_component_linked_from_a_preamble_or_a_non_endpoint_section() {
+    let workspace = Workspace::new();
+    let preamble =
+        "# Сервис\n\nСм. [загрузку][load].\n\n## Общие правила\n\nИ ещё [раз][load].\n\n";
+    let document = format!("{preamble}{OWNER}{LOAD}");
+    assert_that!(workspace.check_rules(&document, "", true))
+        .is_equal_to(vec![rule("MDS019", 3), rule("MDS019", 7)]);
+}

@@ -155,6 +155,12 @@ pub fn is_general_components(block: &Block, labels: &Labels) -> bool {
     matches!(block.kind, BlockKind::Heading(2)) && block.text.trim() == labels.components
 }
 
+pub fn is_general_references(block: &Block, level: u8, labels: &Labels) -> bool {
+    level == 3
+        && matches!(block.kind, BlockKind::Heading(3))
+        && block.text.trim() == labels.references
+}
+
 fn validate_general_components(
     blocks: &[Block],
     path: &Path,
@@ -458,7 +464,9 @@ fn validate_components(
     let mut diagnostics = Vec::new();
     let mut names = HashSet::new();
     for (index, block) in blocks.iter().enumerate() {
-        if !matches!(block.kind, BlockKind::Heading(depth) if depth == level) {
+        if !matches!(block.kind, BlockKind::Heading(depth) if depth == level)
+            || is_general_references(block, level, labels)
+        {
             continue;
         }
         if !names.insert(block.text.trim()) {
