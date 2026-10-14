@@ -5,22 +5,30 @@ use std::path::{Path, PathBuf};
 use crate::config::Config;
 use crate::diagnostics::{Diagnostic, Severity};
 use crate::model::{Block, BlockKind, Document, Link, LinkKind, Position};
+use crate::outline::Outline;
+use crate::parser;
 use crate::rule::Rule;
-use crate::{parser, rules};
 
 type TargetCache = HashMap<PathBuf, Result<HashSet<String>, String>>;
 
 struct Validation<'a> {
     document: &'a Document,
+    outline: &'a Outline<'a>,
     path: &'a Path,
     config: &'a Config,
     cache: TargetCache,
     diagnostics: Vec<Diagnostic>,
 }
 
-pub fn validate(document: &Document, path: &Path, config: &Config) -> Vec<Diagnostic> {
+pub fn validate(
+    document: &Document,
+    outline: &Outline,
+    path: &Path,
+    config: &Config,
+) -> Vec<Diagnostic> {
     let mut validation = Validation {
         document,
+        outline,
         path,
         config,
         cache: HashMap::new(),
@@ -87,7 +95,8 @@ impl Validation<'_> {
     }
 
     fn placement(&mut self) {
-        let sections = reference_sections(self.document, self.config);
+        let outline = self.outline;
+        let sections = &outline.references;
         let first_link =
             checked_links(self.document, self.config).find(|link| link.kind == LinkKind::Link);
         if sections.is_empty() && (first_link.is_some() || !self.document.definitions.is_empty()) {
@@ -218,23 +227,6 @@ fn checked_links<'a>(document: &'a Document, config: &'a Config) -> impl Iterato
         .links
         .iter()
         .filter(|link| !(link.table_of_contents && config.references.toc_allowed))
-}
-
-fn reference_sections<'a>(document: &'a Document, config: &Config) -> Vec<&'a [Block]> {
-    document
-        .blocks
-        .iter()
-        .enumerate()
-        .filter(|(_, block)| block.text.trim() == config.labels.references)
-        .filter_map(|(index, block)| {
-            let extent = match block.kind {
-                BlockKind::Heading { level: 3, .. } => 2,
-                BlockKind::Heading { level: 2, .. } => 0,
-                _ => return None,
-            };
-            Some(rules::children(&document.blocks, index, extent))
-        })
-        .collect()
 }
 
 fn definition_is_terminal(section: &[Block], offset: usize) -> bool {

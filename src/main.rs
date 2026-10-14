@@ -63,8 +63,8 @@ fn check(
                 let document = parser::parse(&source);
                 let outline = outline::build(&document, &config.labels);
                 diagnostics.extend(structure::validate(&outline, &file, &config));
-                diagnostics.extend(rules::validate(&document, &file, &config));
-                diagnostics.extend(references::validate(&document, &file, &config));
+                diagnostics.extend(rules::validate(&outline, &file, &config));
+                diagnostics.extend(references::validate(&document, &outline, &file, &config));
                 documents.push((file, document));
             }
             Err(error) => diagnostics.push(Diagnostic::error(

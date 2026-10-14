@@ -6,9 +6,10 @@ use std::path::{Path, PathBuf};
 use crate::config::Config;
 use crate::diagnostics::Diagnostic;
 use crate::model::{BlockKind, Document, LinkKind, Position};
+use crate::outline::children;
 use crate::references::{is_local, percent_decode};
 use crate::rule::Rule;
-use crate::rules::{children, endpoint_name, is_general_components, is_general_references};
+use crate::rules::{is_endpoint, is_general_components, is_general_references};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Scope {
@@ -81,8 +82,8 @@ fn regions(document: &Document, config: &Config) -> Vec<(Range<usize>, Option<Sc
             let scope = if is_general_components(heading, &config.labels) {
                 Some(Scope::General)
             } else {
-                endpoint_name(heading, &config.labels)
-                    .map(|_| Scope::Endpoint(heading.span.start.offset))
+                is_endpoint(heading, &config.labels)
+                    .then_some(Scope::Endpoint(heading.span.start.offset))
             };
             (heading.span.start.offset..end, scope)
         })
