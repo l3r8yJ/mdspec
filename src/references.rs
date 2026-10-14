@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::config::Config;
 use crate::diagnostics::{Diagnostic, Severity};
-use crate::model::{Block, BlockKind, Document, Link, Position};
+use crate::model::{Block, BlockKind, Document, Link, LinkKind, Position};
 use crate::rule::Rule;
 use crate::{parser, rules};
 
@@ -47,7 +47,10 @@ impl Validation<'_> {
                     format!("Undefined reference identifier: {key}"),
                 ),
                 (None, Some(url)) => {
-                    if self.config.references.require_reference_style && is_local(url) {
+                    if link.kind == LinkKind::Link
+                        && self.config.references.require_reference_style
+                        && is_local(url)
+                    {
                         self.error(
                             Rule::Mds014,
                             Some(link.position),
@@ -85,7 +88,8 @@ impl Validation<'_> {
 
     fn placement(&mut self) {
         let sections = reference_sections(self.document, self.config);
-        let first_link = checked_links(self.document, self.config).next();
+        let first_link =
+            checked_links(self.document, self.config).find(|link| link.kind == LinkKind::Link);
         if sections.is_empty() && (first_link.is_some() || !self.document.definitions.is_empty()) {
             let position = first_link.map(|link| link.position).or_else(|| {
                 self.document

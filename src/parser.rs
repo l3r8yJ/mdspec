@@ -1,4 +1,6 @@
-use crate::model::{Block, BlockKind, Definition, Document, Link, NestedHeading, Position, Span};
+use crate::model::{
+    Block, BlockKind, Definition, Document, Link, LinkKind, NestedHeading, Position, Span,
+};
 use pulldown_cmark::{BrokenLink, CodeBlockKind, Event, LinkType, Options, Parser, Tag, TagEnd};
 use std::collections::HashSet;
 
@@ -187,6 +189,11 @@ impl ParseState<'_> {
                 text: String::new(),
             });
         }
+        let link_kind = if matches!(tag, Tag::Image { .. }) {
+            LinkKind::Image
+        } else {
+            LinkKind::Link
+        };
         match tag {
             Tag::Heading { .. } => {
                 self.heading = Some((String::new(), start));
@@ -222,6 +229,7 @@ impl ParseState<'_> {
                     )
                 });
                 self.document.links.push(Link {
+                    kind: link_kind,
                     key,
                     url: (!unknown).then(|| dest_url.to_string()),
                     position: start,

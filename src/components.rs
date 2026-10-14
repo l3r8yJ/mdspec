@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::config::Config;
 use crate::diagnostics::Diagnostic;
-use crate::model::{BlockKind, Document, Position};
+use crate::model::{BlockKind, Document, LinkKind, Position};
 use crate::references::{is_local, percent_decode};
 use crate::rule::Rule;
 use crate::rules::{children, endpoint_name, is_general_components, is_general_references};
@@ -148,6 +148,7 @@ fn used<'a>(path: &'a Path, document: &Document, config: &Config) -> Vec<Usage<'
     document
         .links
         .iter()
+        .filter(|link| link.kind == LinkKind::Link)
         .filter_map(|link| {
             let (file, anchor) = local_target(link.url.as_deref()?, path)?;
             Some(Usage {

@@ -35,8 +35,15 @@ pub struct Definition {
     pub position: Position,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LinkKind {
+    Link,
+    Image,
+}
+
 #[derive(Debug)]
 pub struct Link {
+    pub kind: LinkKind,
     pub key: Option<String>,
     pub url: Option<String>,
     pub position: Position,
