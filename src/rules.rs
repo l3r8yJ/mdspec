@@ -20,7 +20,7 @@ fn validate_details(
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     for (index, block) in blocks.iter().enumerate() {
-        if !matches!(block.kind, BlockKind::Heading(3)) {
+        if !matches!(block.kind, BlockKind::Heading { level: 3, .. }) {
             continue;
         }
         let children = children(blocks, index, 3);
@@ -38,13 +38,13 @@ pub fn children(blocks: &[Block], index: usize, depth: u8) -> &[Block] {
     let rest = blocks.get(index + 1..).unwrap_or_default();
     let length = rest
         .iter()
-        .position(|block| matches!(block.kind, BlockKind::Heading(level) if level <= depth))
+        .position(|block| matches!(block.kind, BlockKind::Heading { level, .. } if level <= depth))
         .unwrap_or(rest.len());
     rest.get(..length).unwrap_or_default()
 }
 
 fn issue(rule: Rule, path: &Path, block: &Block, message: impl Into<String>) -> Diagnostic {
-    Diagnostic::error(rule, path, Some(block.position), message)
+    Diagnostic::error(rule, path, Some(block.span.start), message)
 }
 
 fn validate_endpoints(
@@ -88,18 +88,24 @@ fn validate_endpoints(
             ));
         }
         diagnostics.extend(validate_path(endpoint, path, config));
-        diagnostics.extend(validate_sections(endpoint, heading.position, path, config));
+        diagnostics.extend(validate_sections(
+            endpoint,
+            heading.span.start,
+            path,
+            config,
+        ));
         validate_details(endpoint, path, &config.labels, diagnostics);
     }
 }
 
 pub fn is_general_components(block: &Block, labels: &Labels) -> bool {
-    matches!(block.kind, BlockKind::Heading(2)) && block.text.trim() == labels.components
+    matches!(block.kind, BlockKind::Heading { level: 2, .. })
+        && block.text.trim() == labels.components
 }
 
 pub fn is_general_references(block: &Block, level: u8, labels: &Labels) -> bool {
     level == 3
-        && matches!(block.kind, BlockKind::Heading(3))
+        && matches!(block.kind, BlockKind::Heading { level: 3, .. })
         && block.text.trim() == labels.references
 }
 
@@ -131,7 +137,7 @@ fn validate_general_components(
         }
         let contents = children(blocks, index, 2);
         if !contents.iter().any(|child| {
-            matches!(child.kind, BlockKind::Heading(3))
+            matches!(child.kind, BlockKind::Heading { level: 3, .. })
                 && !is_general_references(child, 3, &config.labels)
         }) {
             diagnostics.push(issue(
@@ -146,7 +152,7 @@ fn validate_general_components(
 }
 
 pub fn endpoint_name<'a>(block: &'a Block, labels: &Labels) -> Option<&'a str> {
-    if !matches!(block.kind, BlockKind::Heading(2)) {
+    if !matches!(block.kind, BlockKind::Heading { level: 2, .. }) {
         return None;
     }
     block
@@ -161,7 +167,7 @@ fn validate_path(blocks: &[Block], path: &Path, config: &Config) -> Vec<Diagnost
     let paths: Vec<_> = blocks
         .iter()
         .enumerate()
-        .take_while(|(_, block)| !matches!(block.kind, BlockKind::Heading(3)))
+        .take_while(|(_, block)| !matches!(block.kind, BlockKind::Heading { level: 3, .. }))
         .filter(|(_, block)| {
             matches!(block.kind, BlockKind::Paragraph)
                 && block
@@ -174,7 +180,7 @@ fn validate_path(blocks: &[Block], path: &Path, config: &Config) -> Vec<Diagnost
         diagnostics.push(Diagnostic::error(
             Rule::Mds002,
             path,
-            blocks.first().map(|block| block.position),
+            blocks.first().map(|block| block.span.start),
             format!("Missing {} METHOD /path", config.labels.path_prefix),
         ));
     }
@@ -220,7 +226,7 @@ fn validate_sections(
     let mut seen = HashSet::new();
     let mut next_rank = 0;
     for (index, block) in blocks.iter().enumerate() {
-        if !matches!(block.kind, BlockKind::Heading(3)) {
+        if !matches!(block.kind, BlockKind::Heading { level: 3, .. }) {
             continue;
         }
         let name = block.text.trim();
@@ -263,7 +269,7 @@ fn validate_sections(
             0 => contents.iter().any(has_content),
             1..=3 => contents
                 .iter()
-                .any(|child| matches!(child.kind, BlockKind::Heading(4))),
+                .any(|child| matches!(child.kind, BlockKind::Heading { level: 4, .. })),
             _ => true,
         };
         if !populated {
@@ -333,7 +339,7 @@ fn validate_nesting(
     let mut unchecked = false;
     let mut general = false;
     for block in &document.blocks {
-        let BlockKind::Heading(depth) = block.kind else {
+        let BlockKind::Heading { level: depth, .. } = block.kind else {
             continue;
         };
         let valid = match depth {
@@ -377,11 +383,11 @@ fn validate_nesting(
             ));
         }
     }
-    diagnostics.extend(document.nested_headings.iter().map(|position| {
+    diagnostics.extend(document.nested_headings.iter().map(|heading| {
         Diagnostic::error(
             Rule::Mds005,
             path,
-            Some(*position),
+            Some(heading.position),
             "Structural headings must not occur inside lists or blockquotes",
         )
     }));
@@ -396,7 +402,7 @@ fn validate_components(
     let mut diagnostics = Vec::new();
     let mut names = HashSet::new();
     for (index, block) in blocks.iter().enumerate() {
-        if !matches!(block.kind, BlockKind::Heading(depth) if depth == level)
+        if !matches!(block.kind, BlockKind::Heading { level: depth, .. } if depth == level)
             || is_general_references(block, level, labels)
         {
             continue;
@@ -414,7 +420,7 @@ fn validate_components(
             .iter()
             .enumerate()
             .filter(|(_, child)| {
-                matches!(child.kind, BlockKind::Heading(depth) if depth == level + 1)
+                matches!(child.kind, BlockKind::Heading { level: depth, .. } if depth == level + 1)
                     && child.text.trim() == labels.description
             })
             .collect();
@@ -460,7 +466,7 @@ fn validate_examples(
 ) {
     let mut names = HashSet::new();
     for (index, block) in blocks.iter().enumerate() {
-        if !matches!(block.kind, BlockKind::Heading(4)) {
+        if !matches!(block.kind, BlockKind::Heading { level: 4, .. }) {
             continue;
         }
         let name = block.text.trim();
@@ -492,12 +498,12 @@ fn validate_mappings(
 ) {
     let mut inside_mapping = false;
     for (index, block) in blocks.iter().enumerate() {
-        if matches!(block.kind, BlockKind::Heading(4)) {
+        if matches!(block.kind, BlockKind::Heading { level: 4, .. }) {
             inside_mapping = true;
             let contents = children(blocks, index, 4);
             let tables: Vec<_> = contents
                 .iter()
-                .take_while(|child| !matches!(child.kind, BlockKind::Heading(_)))
+                .take_while(|child| !matches!(child.kind, BlockKind::Heading { .. }))
                 .filter(|child| matches!(child.kind, BlockKind::Table(_)))
                 .collect();
             if tables.is_empty() {

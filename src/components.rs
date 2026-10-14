@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 
 use crate::config::Config;
 use crate::diagnostics::Diagnostic;
-use crate::model::{BlockKind, Document, Position};
-use crate::references::{heading_anchors, is_local, percent_decode};
+use crate::model::{BlockKind, Document, LinkKind, Position};
+use crate::references::{is_local, percent_decode};
 use crate::rule::Rule;
 use crate::rules::{children, endpoint_name, is_general_components, is_general_references};
 
@@ -69,7 +69,7 @@ fn regions(document: &Document, config: &Config) -> Vec<(Range<usize>, Option<Sc
     let headings: Vec<_> = document
         .blocks
         .iter()
-        .filter(|block| matches!(block.kind, BlockKind::Heading(2)))
+        .filter(|block| matches!(block.kind, BlockKind::Heading { level: 2, .. }))
         .collect();
     headings
         .iter()
@@ -77,14 +77,14 @@ fn regions(document: &Document, config: &Config) -> Vec<(Range<usize>, Option<Sc
         .map(|(number, heading)| {
             let end = headings
                 .get(number + 1)
-                .map_or(usize::MAX, |next| next.position.offset);
+                .map_or(usize::MAX, |next| next.span.start.offset);
             let scope = if is_general_components(heading, &config.labels) {
                 Some(Scope::General)
             } else {
                 endpoint_name(heading, &config.labels)
-                    .map(|_| Scope::Endpoint(heading.position.offset))
+                    .map(|_| Scope::Endpoint(heading.span.start.offset))
             };
-            (heading.position.offset..end, scope)
+            (heading.span.start.offset..end, scope)
         })
         .collect()
 }
@@ -98,16 +98,17 @@ fn scope_at(regions: &[(Range<usize>, Option<Scope>)], offset: usize) -> Option<
 
 fn declared<'a>(path: &'a Path, document: &'a Document, config: &Config) -> Vec<Component<'a>> {
     let file = canonical(path);
-    let anchors = heading_anchors(document);
     let regions = regions(document, config);
     let mut components = Vec::new();
     for (index, block) in document.blocks.iter().enumerate() {
         let (level, scope) = match block.kind {
-            BlockKind::Heading(2) if is_general_components(block, &config.labels) => {
+            BlockKind::Heading { level: 2, .. } if is_general_components(block, &config.labels) => {
                 (3, Scope::General)
             }
-            BlockKind::Heading(3) if block.text.trim() == config.labels.components => {
-                match scope_at(&regions, block.position.offset) {
+            BlockKind::Heading { level: 3, .. }
+                if block.text.trim() == config.labels.components =>
+            {
+                match scope_at(&regions, block.span.start.offset) {
                     Some(Scope::Endpoint(endpoint)) => (4, Scope::Endpoint(endpoint)),
                     _ => continue,
                 }
@@ -116,29 +117,24 @@ fn declared<'a>(path: &'a Path, document: &'a Document, config: &Config) -> Vec<
         };
         let section = children(&document.blocks, index, level - 1);
         for (offset, heading) in section.iter().enumerate() {
-            if !matches!(heading.kind, BlockKind::Heading(depth) if depth == level)
+            if !matches!(heading.kind, BlockKind::Heading { level: depth, .. } if depth == level)
                 || is_general_references(heading, level, &config.labels)
             {
                 continue;
             }
-            let Some(anchor) = document
-                .headings
-                .iter()
-                .position(|(_, position)| position.offset == heading.position.offset)
-                .and_then(|number| anchors.get(number))
-            else {
+            let BlockKind::Heading { anchor, .. } = &heading.kind else {
                 continue;
             };
             let end = children(section, offset, level)
                 .last()
-                .map_or(heading.end, |last| last.end);
+                .map_or(heading.span.end.offset, |last| last.span.end.offset);
             components.push(Component {
                 path,
                 file: file.clone(),
                 anchor: anchor.clone(),
                 name: heading.text.trim(),
-                position: heading.position,
-                extent: heading.position.offset..end,
+                position: heading.span.start,
+                extent: heading.span.start.offset..end,
                 scope,
             });
         }
@@ -152,6 +148,7 @@ fn used<'a>(path: &'a Path, document: &Document, config: &Config) -> Vec<Usage<'
     document
         .links
         .iter()
+        .filter(|link| link.kind == LinkKind::Link)
         .filter_map(|link| {
             let (file, anchor) = local_target(link.url.as_deref()?, path)?;
             Some(Usage {

@@ -203,3 +203,32 @@ fn reports_definition_position_when_content_follows_it() {
     assert_that!(report["diagnostics"][0]["rule"].as_str()).is_equal_to(Some("MDS015"));
     assert_that!(report["diagnostics"][0]["line"].as_u64()).is_equal_to(Some(13));
 }
+
+#[test]
+fn accepts_an_inline_image_of_an_existing_file_without_a_references_section() {
+    let workspace = Workspace::new();
+    workspace.write("diagram.svg", b"<svg/>");
+    let (status, report) = workspace.check_document(&document("![Схема](diagram.svg)"), "", true);
+    assert_that!(status).is_equal_to(Some(0));
+    assert_that!(common::rules_with_lines(&report)).is_empty();
+}
+
+#[test]
+fn reports_an_inline_image_of_a_missing_file() {
+    let workspace = Workspace::new();
+    let (_, report) = workspace.check_document(&document("![Схема](diagram.svg)"), "", true);
+    assert_that!(common::rules_with_lines(&report)).is_equal_to(vec![common::rule("MDS012", 9)]);
+}
+
+#[test]
+fn counts_a_reference_style_image_as_using_its_definition() {
+    let workspace = Workspace::new();
+    workspace.write("diagram.svg", b"<svg/>");
+    let (status, report) = workspace.check_document(
+        &document("![Схема][diagram]\n\n### Ссылки\n\n[diagram]: diagram.svg"),
+        "",
+        true,
+    );
+    assert_that!(status).is_equal_to(Some(0));
+    assert_that!(common::rules_with_lines(&report)).is_empty();
+}

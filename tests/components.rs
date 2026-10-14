@@ -320,3 +320,11 @@ fn rejects_a_general_component_heading_without_a_name() {
         format!("{LINKED}## Компоненты\n\n### \n\n#### Описание\n\nТекст.\n\n{REFERENCES}");
     assert_that!(workspace.check_rules(&document, "", true)).contains(rule("MDS005", 11));
 }
+
+#[test]
+fn does_not_count_an_image_as_a_general_component_reference() {
+    let workspace = Workspace::new();
+    let plain = PLAIN.replace("Текст.", "![Схема](#проверка-прав)");
+    let document = format!("{plain}{GENERAL}");
+    assert_that!(workspace.check_rules(&document, "", true)).is_equal_to(vec![rule("MDS018", 11)]);
+}

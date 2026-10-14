@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::config::Config;
 use crate::diagnostics::{Diagnostic, Severity};
-use crate::model::{Block, BlockKind, Document, Link, Position};
+use crate::model::{Block, BlockKind, Document, Link, LinkKind, Position};
 use crate::rule::Rule;
 use crate::{parser, rules};
 
@@ -47,7 +47,10 @@ impl Validation<'_> {
                     format!("Undefined reference identifier: {key}"),
                 ),
                 (None, Some(url)) => {
-                    if self.config.references.require_reference_style && is_local(url) {
+                    if link.kind == LinkKind::Link
+                        && self.config.references.require_reference_style
+                        && is_local(url)
+                    {
                         self.error(
                             Rule::Mds014,
                             Some(link.position),
@@ -85,7 +88,8 @@ impl Validation<'_> {
 
     fn placement(&mut self) {
         let sections = reference_sections(self.document, self.config);
-        let first_link = checked_links(self.document, self.config).next();
+        let first_link =
+            checked_links(self.document, self.config).find(|link| link.kind == LinkKind::Link);
         if sections.is_empty() && (first_link.is_some() || !self.document.definitions.is_empty()) {
             let position = first_link.map(|link| link.position).or_else(|| {
                 self.document
@@ -120,7 +124,7 @@ impl Validation<'_> {
         {
             self.error(
                 Rule::Mds015,
-                Some(block.position),
+                Some(block.span.start),
                 format!(
                     "Only reference definitions are allowed after the {} heading",
                     self.config.labels.references
@@ -224,8 +228,8 @@ fn reference_sections<'a>(document: &'a Document, config: &Config) -> Vec<&'a [B
         .filter(|(_, block)| block.text.trim() == config.labels.references)
         .filter_map(|(index, block)| {
             let extent = match block.kind {
-                BlockKind::Heading(3) => 2,
-                BlockKind::Heading(2) => 0,
+                BlockKind::Heading { level: 3, .. } => 2,
+                BlockKind::Heading { level: 2, .. } => 0,
                 _ => return None,
             };
             Some(rules::children(&document.blocks, index, extent))
@@ -237,7 +241,9 @@ fn definition_is_terminal(section: &[Block], offset: usize) -> bool {
     section
         .iter()
         .all(|block| matches!(block.kind, BlockKind::Definition))
-        && section.iter().any(|block| block.position.offset == offset)
+        && section
+            .iter()
+            .any(|block| block.span.start.offset == offset)
 }
 
 fn check_file(target: &Path) -> Result<(), String> {
@@ -281,38 +287,8 @@ pub fn percent_decode(value: &str) -> Option<String> {
         .filter(|value| !value.contains('\0'))
 }
 
-pub fn heading_anchors(document: &Document) -> Vec<String> {
-    let mut seen = HashSet::new();
-    let mut ordered = Vec::with_capacity(document.headings.len());
-    for (heading, _) in &document.headings {
-        let base: String = heading
-            .to_lowercase()
-            .chars()
-            .filter_map(|character| {
-                if character.is_whitespace() {
-                    Some('-')
-                } else if character.is_alphanumeric() || matches!(character, '_' | '-') {
-                    Some(character)
-                } else {
-                    None
-                }
-            })
-            .collect();
-        let mut anchor = base.clone();
-        for suffix in 1..=seen.len() {
-            if !seen.contains(&anchor) {
-                break;
-            }
-            anchor = format!("{base}-{suffix}");
-        }
-        seen.insert(anchor.clone());
-        ordered.push(anchor);
-    }
-    ordered
-}
-
 fn anchors(document: &Document) -> HashSet<String> {
-    heading_anchors(document).into_iter().collect()
+    document.anchors().map(str::to_owned).collect()
 }
 
 fn target_anchors(target: &Path, cache: &mut TargetCache) -> Result<HashSet<String>, String> {
