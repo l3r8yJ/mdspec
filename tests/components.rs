@@ -260,3 +260,13 @@ fn names_the_expected_heading_level_of_a_missing_component_description() {
         "Component Проверка прав is missing H4 Описание".to_owned(),
     ]);
 }
+
+#[test]
+fn rejects_an_empty_description_followed_by_a_sibling_heading_with_text() {
+    let workspace = Workspace::new();
+    let general =
+        "## Компоненты\n\n### Проверка прав\n\n#### Описание\n\n#### Детали\n\nТекст.\n\n";
+    let document = format!("{LINKED}{general}{REFERENCES}");
+    assert_that!(workspace.check_rules(&document, "", true))
+        .is_equal_to(vec![rule("MDS008", 13), rule("MDS005", 15)]);
+}
