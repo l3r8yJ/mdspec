@@ -38,9 +38,6 @@ struct Usage<'a> {
 }
 
 pub fn validate(documents: &[(PathBuf, Document)], config: &Config) -> Vec<Diagnostic> {
-    if !config.document.multiple_endpoints {
-        return Vec::new();
-    }
     let components: Vec<_> = documents
         .iter()
         .flat_map(|(path, document)| declared(path, document, config))

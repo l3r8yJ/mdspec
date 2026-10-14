@@ -7,14 +7,8 @@ use std::path::Path;
 
 pub fn validate(document: &Document, path: &Path, config: &Config) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
-    if config.document.multiple_endpoints {
-        validate_endpoints(&document.blocks, path, config, &mut diagnostics);
-        validate_general_components(&document.blocks, path, config, &mut diagnostics);
-    } else {
-        validate_endpoint(document, path, config, &mut diagnostics);
-        diagnostics.extend(validate_sections(&document.blocks, None, path, config));
-        validate_details(&document.blocks, path, &config.labels, &mut diagnostics);
-    }
+    validate_endpoints(&document.blocks, path, config, &mut diagnostics);
+    validate_general_components(&document.blocks, path, config, &mut diagnostics);
     validate_nesting(document, path, config, &mut diagnostics);
     diagnostics
 }
@@ -51,53 +45,6 @@ pub fn children(blocks: &[Block], index: usize, depth: u8) -> &[Block] {
 
 fn issue(rule: Rule, path: &Path, block: &Block, message: impl Into<String>) -> Diagnostic {
     Diagnostic::error(rule, path, Some(block.position), message)
-}
-
-fn validate_endpoint(
-    document: &Document,
-    path: &Path,
-    config: &Config,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
-    let headings: Vec<_> = document
-        .blocks
-        .iter()
-        .enumerate()
-        .filter(|(_, block)| matches!(block.kind, BlockKind::Heading(2)))
-        .collect();
-    if headings.is_empty() && config.document.require_endpoint {
-        diagnostics.push(Diagnostic::error(
-            Rule::Mds001,
-            path,
-            None,
-            format!("Missing H2 heading: {} name", config.labels.endpoint_prefix),
-        ));
-    }
-    for (number, (_, heading)) in headings.iter().enumerate() {
-        if number > 0
-            || heading
-                .text
-                .trim()
-                .strip_prefix(config.labels.endpoint_prefix.as_str())
-                .is_none_or(|name| name.trim().is_empty())
-        {
-            diagnostics.push(issue(
-                Rule::Mds001,
-                path,
-                heading,
-                format!(
-                    "Expected one H2 heading: {} name",
-                    config.labels.endpoint_prefix
-                ),
-            ));
-        }
-    }
-    diagnostics.extend(validate_path(
-        &document.blocks,
-        headings.first().map(|(index, _)| *index),
-        path,
-        config,
-    ));
 }
 
 fn validate_endpoints(
@@ -140,13 +87,8 @@ fn validate_endpoints(
                 ),
             ));
         }
-        diagnostics.extend(validate_path(endpoint, Some(0), path, config));
-        diagnostics.extend(validate_sections(
-            endpoint,
-            Some(heading.position),
-            path,
-            config,
-        ));
+        diagnostics.extend(validate_path(endpoint, path, config));
+        diagnostics.extend(validate_sections(endpoint, heading.position, path, config));
         validate_details(endpoint, path, &config.labels, diagnostics);
     }
 }
@@ -214,12 +156,7 @@ pub fn endpoint_name<'a>(block: &'a Block, labels: &Labels) -> Option<&'a str> {
         .map(str::trim)
 }
 
-fn validate_path(
-    blocks: &[Block],
-    heading: Option<usize>,
-    path: &Path,
-    config: &Config,
-) -> Vec<Diagnostic> {
+fn validate_path(blocks: &[Block], path: &Path, config: &Config) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     let paths: Vec<_> = blocks
         .iter()
@@ -233,18 +170,16 @@ fn validate_path(
                     .starts_with(config.labels.path_prefix.as_str())
         })
         .collect();
-    if paths.is_empty() && (config.document.require_endpoint || heading.is_some()) {
+    if paths.is_empty() {
         diagnostics.push(Diagnostic::error(
             Rule::Mds002,
             path,
-            heading
-                .and_then(|index| blocks.get(index))
-                .map(|block| block.position),
+            blocks.first().map(|block| block.position),
             format!("Missing {} METHOD /path", config.labels.path_prefix),
         ));
     }
     for (index, block) in paths {
-        let immediately_after_endpoint = heading.is_some_and(|heading| index == heading + 1);
+        let immediately_after_endpoint = index == 1;
         if !immediately_after_endpoint || !valid_path(&block.text, &config.labels) {
             diagnostics.push(issue(
                 Rule::Mds002,
@@ -277,7 +212,7 @@ fn valid_path(text: &str, labels: &Labels) -> bool {
 
 fn validate_sections(
     blocks: &[Block],
-    endpoint: Option<Position>,
+    endpoint: Position,
     path: &Path,
     config: &Config,
 ) -> Vec<Diagnostic> {
@@ -346,7 +281,7 @@ fn validate_sections(
 
 fn validate_required_sections(
     seen: &HashSet<&str>,
-    endpoint: Option<Position>,
+    endpoint: Position,
     path: &Path,
     config: &Config,
 ) -> Vec<Diagnostic> {
@@ -370,7 +305,7 @@ fn validate_required_sections(
             diagnostics.push(Diagnostic::error(
                 Rule::Mds003,
                 path,
-                endpoint,
+                Some(endpoint),
                 format!("Missing required section: {name}"),
             ));
         }
@@ -394,7 +329,7 @@ fn validate_nesting(
     let mut section = "";
     let mut component = false;
     let mut endpoint = !config.document.require_endpoint;
-    let mut title_allowed = config.document.multiple_endpoints;
+    let mut title_allowed = true;
     let mut unchecked = false;
     let mut general = false;
     for block in &document.blocks {
@@ -406,11 +341,8 @@ fn validate_nesting(
             2 => {
                 endpoint = true;
                 title_allowed = false;
-                general = config.document.multiple_endpoints
-                    && is_general_components(block, &config.labels);
-                unchecked = config.document.multiple_endpoints
-                    && !general
-                    && endpoint_name(block, &config.labels).is_none();
+                general = is_general_components(block, &config.labels);
+                unchecked = !general && endpoint_name(block, &config.labels).is_none();
                 section = "";
                 component = false;
                 true

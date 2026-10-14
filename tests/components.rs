@@ -95,14 +95,6 @@ fn accepts_a_document_that_holds_only_general_components() {
     assert_that!(common::rule_names(&report)).does_not_contain("MDS001".to_owned());
 }
 
-#[test]
-fn keeps_reporting_an_extra_h2_in_single_endpoint_mode() {
-    let workspace = Workspace::new();
-    let document = format!("{PLAIN}{GENERAL}");
-    let config = "[document]\nmultiple_endpoints = false\n";
-    assert_that!(workspace.check_rule_names(&document, config, true)).contains("MDS001".to_owned());
-}
-
 const LOADING: &str =
     "## Эндпоинт: А\n\nPath: `GET /a`\n\n### Логика работы\n\n[Загрузить][load].\n\n";
 const CHAINED: &str = "## Компоненты\n\n### Проверка прав\n\n#### Описание\n\nПроверить доступ.\n\n### Загрузка\n\n#### Описание\n\nЗагрузить после [проверки][check].\n\n";

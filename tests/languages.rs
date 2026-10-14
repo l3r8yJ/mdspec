@@ -126,3 +126,9 @@ fn preserves_default_labels_when_only_one_label_is_overridden() {
     assert_that!(code).is_equal_to(Some(0));
     assert_that!(report["error_count"].as_u64()).is_equal_to(Some(0));
 }
+
+#[test]
+fn rejects_the_removed_multiple_endpoints_key() {
+    let (code, message) = common::label_error("[document]\nmultiple_endpoints = true\n");
+    assert_that!((code, message.contains("multiple_endpoints"))).is_equal_to((Some(2), true));
+}
