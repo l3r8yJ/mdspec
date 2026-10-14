@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -25,6 +26,8 @@ struct Component<'a> {
     scope: Scope,
 }
 
+type Key = (PathBuf, String);
+
 struct Usage<'a> {
     path: &'a Path,
     source: PathBuf,
@@ -46,14 +49,21 @@ pub fn validate(documents: &[(PathBuf, Document)], config: &Config) -> Vec<Diagn
         .iter()
         .flat_map(|(path, document)| used(path, document, config))
         .collect();
+    let mut index: HashMap<Key, &Component> = HashMap::new();
+    for component in &components {
+        index
+            .entry((component.file.clone(), component.anchor.clone()))
+            .or_insert(component);
+    }
+    let referenced = referenced_keys(&usages, &index);
     components
         .iter()
         .filter(|component| component.scope == Scope::General)
-        .filter_map(|component| unreferenced(component, &usages))
+        .filter_map(|component| unreferenced(component, &referenced))
         .chain(
             usages
                 .iter()
-                .filter_map(|usage| misplaced(usage, &components, config)),
+                .filter_map(|usage| misplaced(usage, &index, config)),
         )
         .collect()
 }
@@ -180,16 +190,23 @@ fn canonical(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
-fn targets(usage: &Usage, component: &Component) -> bool {
-    usage.file == component.file && usage.anchor == component.anchor
+fn referenced_keys(usages: &[Usage], index: &HashMap<Key, &Component>) -> HashSet<Key> {
+    usages
+        .iter()
+        .filter(|usage| {
+            index
+                .get(&(usage.file.clone(), usage.anchor.clone()))
+                .is_some_and(|component| {
+                    !(usage.source == component.file
+                        && component.extent.contains(&usage.position.offset))
+                })
+        })
+        .map(|usage| (usage.file.clone(), usage.anchor.clone()))
+        .collect()
 }
 
-fn unreferenced(component: &Component, usages: &[Usage]) -> Option<Diagnostic> {
-    let referenced = usages.iter().any(|usage| {
-        targets(usage, component)
-            && !(usage.source == component.file
-                && component.extent.contains(&usage.position.offset))
-    });
+fn unreferenced(component: &Component, referenced: &HashSet<Key>) -> Option<Diagnostic> {
+    let referenced = referenced.contains(&(component.file.clone(), component.anchor.clone()));
     (!referenced).then(|| {
         Diagnostic::error(
             Rule::Mds018,
@@ -203,10 +220,12 @@ fn unreferenced(component: &Component, usages: &[Usage]) -> Option<Diagnostic> {
     })
 }
 
-fn misplaced(usage: &Usage, components: &[Component], config: &Config) -> Option<Diagnostic> {
-    let component = components
-        .iter()
-        .find(|component| targets(usage, component))?;
+fn misplaced(
+    usage: &Usage,
+    index: &HashMap<Key, &Component>,
+    config: &Config,
+) -> Option<Diagnostic> {
+    let component = index.get(&(usage.file.clone(), usage.anchor.clone()))?;
     let inside = usage.source == component.file && usage.scope == Some(component.scope);
     (component.scope != Scope::General && !inside).then(|| {
         let mut diagnostic = Diagnostic::error(
