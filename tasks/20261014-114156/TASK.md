@@ -1,6 +1,6 @@
 # Move components to the bottom
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 120
 - TAGS: v0.1.5
 
