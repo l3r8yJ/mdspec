@@ -3,7 +3,7 @@
 mod common;
 
 use asserting::prelude::*;
-use common::{Workspace, rule, rule_count};
+use common::{Workspace, diagnostics, rule, rule_count, rules_with_lines};
 
 #[test]
 fn accepts_complete_document_with_unicode_and_code_blocks() {
@@ -244,5 +244,30 @@ fn rejects_a_structural_heading_inside_a_blockquote() {
         include_str!("fixtures/minimal.md")
     );
     let workspace = Workspace::new();
-    assert_that!(workspace.check_rules(&document, "", true)).is_equal_to(vec![rule("MDS005", 9)]);
+    let (_, report) = workspace.check_document(&document, "", true);
+    assert_that!(rules_with_lines(&report)).is_equal_to(vec![rule("MDS005", 9)]);
+    assert_that!(
+        diagnostics(&report)
+            .iter()
+            .filter_map(|diagnostic| diagnostic["message"].as_str())
+            .collect::<Vec<_>>()
+    )
+    .is_equal_to(vec![
+        "Structural headings must not occur inside lists or blockquotes",
+    ]);
+}
+
+#[test]
+fn does_not_report_an_unknown_section_after_a_late_title() {
+    let document = format!(
+        "{}\n# Приложение\n\n### Примечания\n\nТекст.\n",
+        include_str!("fixtures/minimal.md")
+    );
+    let workspace = Workspace::new();
+    assert_that!(workspace.check_rules(
+        &document,
+        "[document]\nallow_unknown_sections = false\n",
+        true
+    ))
+    .is_equal_to(vec![rule("MDS005", 9)]);
 }
