@@ -1,5 +1,6 @@
-use crate::model::{Block, BlockKind, Definition, Document, Link, Position};
+use crate::model::{Block, BlockKind, Definition, Document, Link, NestedHeading, Position};
 use pulldown_cmark::{BrokenLink, CodeBlockKind, Event, LinkType, Options, Parser, Tag, TagEnd};
+use std::collections::HashSet;
 
 const BYTE_ORDER_MARK: char = '\u{FEFF}';
 
@@ -30,7 +31,6 @@ pub fn parse(source: &str) -> Document {
         blocks: Vec::new(),
         definitions,
         links: Vec::new(),
-        headings: Vec::new(),
         nested_headings: Vec::new(),
     };
     let mut state = ParseState {
@@ -38,6 +38,7 @@ pub fn parse(source: &str) -> Document {
         positions,
         depth: 0,
         heading: None,
+        seen_anchors: HashSet::new(),
         table_rows: Vec::new(),
         cell: None,
         in_html_comment: false,
@@ -72,6 +73,7 @@ struct ParseState<'a> {
     positions: SourcePositions<'a>,
     depth: usize,
     heading: Option<(String, Position)>,
+    seen_anchors: HashSet<String>,
     table_rows: Vec<Vec<String>>,
     cell: Option<String>,
     in_html_comment: bool,
@@ -161,7 +163,10 @@ impl ParseState<'_> {
                     Some("[TOC]" | "[[_TOC_]]")
                 );
             let kind = match &tag {
-                Tag::Heading { level, .. } => BlockKind::Heading(*level as u8),
+                Tag::Heading { level, .. } => BlockKind::Heading {
+                    level: *level as u8,
+                    anchor: String::new(),
+                },
                 Tag::Table(_) => BlockKind::Table(Vec::new()),
                 Tag::Paragraph => BlockKind::Paragraph,
                 Tag::CodeBlock(CodeBlockKind::Fenced(_)) => BlockKind::Code,
@@ -177,9 +182,6 @@ impl ParseState<'_> {
         match tag {
             Tag::Heading { .. } => {
                 self.heading = Some((String::new(), start));
-                if self.depth > 0 {
-                    self.document.nested_headings.push(start);
-                }
             }
             Tag::TableHead | Tag::TableRow => self.table_rows.push(Vec::new()),
             Tag::TableCell => self.cell = Some(String::new()),
@@ -223,12 +225,46 @@ impl ParseState<'_> {
         self.depth += 1;
     }
 
+    fn anchor(&mut self, text: &str) -> String {
+        let base: String = text
+            .to_lowercase()
+            .chars()
+            .filter_map(|character| {
+                if character.is_whitespace() {
+                    Some('-')
+                } else if character.is_alphanumeric() || matches!(character, '_' | '-') {
+                    Some(character)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let mut anchor = base.clone();
+        for suffix in 1..=self.seen_anchors.len() {
+            if !self.seen_anchors.contains(&anchor) {
+                break;
+            }
+            anchor = format!("{base}-{suffix}");
+        }
+        self.seen_anchors.insert(anchor.clone());
+        anchor
+    }
+
     fn end(&mut self, tag: TagEnd) {
         self.depth = self.depth.saturating_sub(1);
         match tag {
             TagEnd::Heading(_) => {
-                if let Some(value) = self.heading.take() {
-                    self.document.headings.push(value);
+                if let Some((text, position)) = self.heading.take() {
+                    let anchor = self.anchor(&text);
+                    if self.depth > 0 {
+                        self.document
+                            .nested_headings
+                            .push(NestedHeading { position, anchor });
+                    } else if let Some(block) = self.document.blocks.last_mut()
+                        && let BlockKind::Heading { anchor: slot, .. } = &mut block.kind
+                    {
+                        *slot = anchor;
+                    }
                 }
             }
             TagEnd::TableCell => {
@@ -300,7 +336,8 @@ mod tests {
     #[test]
     fn parses_a_document_that_starts_with_a_byte_order_mark() {
         let document = parse("\u{FEFF}## Тест\r\n\r\nЯ [нет]\r\n");
-        assert_that!(document.headings[0].0.as_str()).is_equal_to("Тест");
+        assert_that!(document.blocks[0].text.as_str()).is_equal_to("Тест");
+        assert_that!(matches!(&document.blocks[0].kind, BlockKind::Heading { anchor, .. } if anchor == "тест")).is_equal_to(true);
         assert_that!(document.links[0].position.line).is_equal_to(3);
         assert_that!(document.links[0].position.column).is_equal_to(3);
     }
@@ -315,7 +352,7 @@ mod tests {
     #[test]
     fn keeps_visible_heading_text_without_inline_html_tags() {
         let document = parse("## <em>Имя</em>\n");
-        assert_that!(document.headings[0].0.as_str()).is_equal_to("Имя");
+        assert_that!(document.blocks[0].text.as_str()).is_equal_to("Имя");
     }
 
     #[test]
@@ -341,9 +378,25 @@ mod tests {
         let document = parse(
             "## Заголовок\n\n> ### Вложенный\n\n```md\n# Fake\n```\n\n| Source | Target |\n| --- | --- |\n| id | |\n",
         );
-        assert_that!(document.headings.len()).is_equal_to(2);
+        assert_that!(document.anchors().count()).is_equal_to(2);
         assert_that!(document.nested_headings.len()).is_equal_to(1);
         assert_that!(matches!(document.blocks.last().map(|block| &block.kind), Some(BlockKind::Table(rows)) if rows[1][1].is_empty())).is_equal_to(true);
+    }
+
+    #[test]
+    fn assigns_unique_anchors_across_top_level_and_nested_headings() {
+        let document = parse("## A\n\n> ## A\n\n## A\n");
+        let top_level: Vec<&str> = document
+            .blocks
+            .iter()
+            .filter_map(|block| match &block.kind {
+                BlockKind::Heading { anchor, .. } => Some(anchor.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_that!(top_level).is_equal_to(vec!["a", "a-2"]);
+        assert_that!(document.nested_headings.len()).is_equal_to(1);
+        assert_that!(document.nested_headings[0].anchor.as_str()).is_equal_to("a-1");
     }
 
     #[test]
@@ -357,7 +410,7 @@ mod tests {
     fn preserves_breaks_between_words_in_multiline_content_and_headings() {
         let document =
             parse("First\nsecond\n======\n\nThird  \nfourth\n\n- Fifth\n\n  Sixth\n- Seventh\n");
-        assert_that!(document.headings[0].0.as_str()).is_equal_to("First second");
+        assert_that!(matches!(&document.blocks[0].kind, BlockKind::Heading { anchor, .. } if anchor == "first-second")).is_equal_to(true);
         assert_that!(document.blocks[0].text.as_str()).is_equal_to("First\nsecond");
         assert_that!(document.blocks[1].text.as_str()).is_equal_to("Third\nfourth\n");
         assert_that!(document.blocks[2].text.as_str()).is_equal_to("Fifth\nSixth\n\nSeventh\n\n");

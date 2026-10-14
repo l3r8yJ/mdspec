@@ -16,7 +16,7 @@ pub struct Block {
 #[derive(Debug)]
 pub enum BlockKind {
     Paragraph,
-    Heading(u8),
+    Heading { level: u8, anchor: String },
     Table(Vec<Vec<String>>),
     Code,
     Content,
@@ -38,11 +38,32 @@ pub struct Link {
     pub table_of_contents: bool,
 }
 
+#[derive(Debug)]
+pub struct NestedHeading {
+    pub position: Position,
+    pub anchor: String,
+}
+
 #[derive(Debug, Default)]
 pub struct Document {
     pub blocks: Vec<Block>,
     pub definitions: Vec<Definition>,
     pub links: Vec<Link>,
-    pub headings: Vec<(String, Position)>,
-    pub nested_headings: Vec<Position>,
+    pub nested_headings: Vec<NestedHeading>,
+}
+
+impl Document {
+    pub fn anchors(&self) -> impl Iterator<Item = &str> {
+        self.blocks
+            .iter()
+            .filter_map(|block| match &block.kind {
+                BlockKind::Heading { anchor, .. } => Some(anchor.as_str()),
+                _ => None,
+            })
+            .chain(
+                self.nested_headings
+                    .iter()
+                    .map(|heading| heading.anchor.as_str()),
+            )
+    }
 }

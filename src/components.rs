@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use crate::config::Config;
 use crate::diagnostics::Diagnostic;
 use crate::model::{BlockKind, Document, Position};
-use crate::references::{heading_anchors, is_local, percent_decode};
+use crate::references::{is_local, percent_decode};
 use crate::rule::Rule;
 use crate::rules::{children, endpoint_name, is_general_components, is_general_references};
 
@@ -69,7 +69,7 @@ fn regions(document: &Document, config: &Config) -> Vec<(Range<usize>, Option<Sc
     let headings: Vec<_> = document
         .blocks
         .iter()
-        .filter(|block| matches!(block.kind, BlockKind::Heading(2)))
+        .filter(|block| matches!(block.kind, BlockKind::Heading { level: 2, .. }))
         .collect();
     headings
         .iter()
@@ -98,15 +98,16 @@ fn scope_at(regions: &[(Range<usize>, Option<Scope>)], offset: usize) -> Option<
 
 fn declared<'a>(path: &'a Path, document: &'a Document, config: &Config) -> Vec<Component<'a>> {
     let file = canonical(path);
-    let anchors = heading_anchors(document);
     let regions = regions(document, config);
     let mut components = Vec::new();
     for (index, block) in document.blocks.iter().enumerate() {
         let (level, scope) = match block.kind {
-            BlockKind::Heading(2) if is_general_components(block, &config.labels) => {
+            BlockKind::Heading { level: 2, .. } if is_general_components(block, &config.labels) => {
                 (3, Scope::General)
             }
-            BlockKind::Heading(3) if block.text.trim() == config.labels.components => {
+            BlockKind::Heading { level: 3, .. }
+                if block.text.trim() == config.labels.components =>
+            {
                 match scope_at(&regions, block.position.offset) {
                     Some(Scope::Endpoint(endpoint)) => (4, Scope::Endpoint(endpoint)),
                     _ => continue,
@@ -116,17 +117,12 @@ fn declared<'a>(path: &'a Path, document: &'a Document, config: &Config) -> Vec<
         };
         let section = children(&document.blocks, index, level - 1);
         for (offset, heading) in section.iter().enumerate() {
-            if !matches!(heading.kind, BlockKind::Heading(depth) if depth == level)
+            if !matches!(heading.kind, BlockKind::Heading { level: depth, .. } if depth == level)
                 || is_general_references(heading, level, &config.labels)
             {
                 continue;
             }
-            let Some(anchor) = document
-                .headings
-                .iter()
-                .position(|(_, position)| position.offset == heading.position.offset)
-                .and_then(|number| anchors.get(number))
-            else {
+            let BlockKind::Heading { anchor, .. } = &heading.kind else {
                 continue;
             };
             let end = children(section, offset, level)

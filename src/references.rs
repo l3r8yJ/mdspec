@@ -224,8 +224,8 @@ fn reference_sections<'a>(document: &'a Document, config: &Config) -> Vec<&'a [B
         .filter(|(_, block)| block.text.trim() == config.labels.references)
         .filter_map(|(index, block)| {
             let extent = match block.kind {
-                BlockKind::Heading(3) => 2,
-                BlockKind::Heading(2) => 0,
+                BlockKind::Heading { level: 3, .. } => 2,
+                BlockKind::Heading { level: 2, .. } => 0,
                 _ => return None,
             };
             Some(rules::children(&document.blocks, index, extent))
@@ -281,38 +281,8 @@ pub fn percent_decode(value: &str) -> Option<String> {
         .filter(|value| !value.contains('\0'))
 }
 
-pub fn heading_anchors(document: &Document) -> Vec<String> {
-    let mut seen = HashSet::new();
-    let mut ordered = Vec::with_capacity(document.headings.len());
-    for (heading, _) in &document.headings {
-        let base: String = heading
-            .to_lowercase()
-            .chars()
-            .filter_map(|character| {
-                if character.is_whitespace() {
-                    Some('-')
-                } else if character.is_alphanumeric() || matches!(character, '_' | '-') {
-                    Some(character)
-                } else {
-                    None
-                }
-            })
-            .collect();
-        let mut anchor = base.clone();
-        for suffix in 1..=seen.len() {
-            if !seen.contains(&anchor) {
-                break;
-            }
-            anchor = format!("{base}-{suffix}");
-        }
-        seen.insert(anchor.clone());
-        ordered.push(anchor);
-    }
-    ordered
-}
-
 fn anchors(document: &Document) -> HashSet<String> {
-    heading_anchors(document).into_iter().collect()
+    document.anchors().map(str::to_owned).collect()
 }
 
 fn target_anchors(target: &Path, cache: &mut TargetCache) -> Result<HashSet<String>, String> {
