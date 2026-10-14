@@ -81,3 +81,66 @@ fn keeps_reporting_an_extra_h2_in_single_endpoint_mode() {
     let config = "[document]\nmultiple_endpoints = false\n";
     assert_that!(workspace.check_rule_names(&document, config, true)).contains("MDS001".to_owned());
 }
+
+const LOADING: &str =
+    "## Эндпоинт: А\n\nPath: `GET /a`\n\n### Логика работы\n\n[Загрузить][load].\n\n";
+const CHAINED: &str = "## Компоненты\n\n### Проверка прав\n\n#### Описание\n\nПроверить доступ.\n\n### Загрузка\n\n#### Описание\n\nЗагрузить после [проверки][check].\n\n";
+
+#[test]
+fn reports_an_unreferenced_general_component() {
+    let workspace = Workspace::new();
+    let document = format!("{PLAIN}{GENERAL}");
+    assert_that!(workspace.check_rules(&document, "", true)).is_equal_to(vec![rule("MDS018", 11)]);
+}
+
+#[test]
+fn does_not_count_a_general_component_linking_to_itself() {
+    let workspace = Workspace::new();
+    let document = format!(
+        "{PLAIN}## Компоненты\n\n### Проверка прав\n\n#### Описание\n\nСм. [себя][check].\n\n{REFERENCES}"
+    );
+    assert_that!(workspace.check_rules(&document, "", true)).is_equal_to(vec![rule("MDS018", 11)]);
+}
+
+#[test]
+fn accepts_a_general_component_referenced_only_by_another_general_component() {
+    let workspace = Workspace::new();
+    let document =
+        format!("{LOADING}{CHAINED}## Ссылки\n\n[check]: #проверка-прав\n[load]: #загрузка\n");
+    assert_that!(workspace.check_rules(&document, "", true)).is_empty();
+}
+
+#[test]
+fn accepts_a_percent_encoded_reference_to_a_general_component() {
+    let workspace = Workspace::new();
+    let document = format!(
+        "{LINKED}{GENERAL}## Ссылки\n\n[check]: #%D0%BF%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B0-%D0%BF%D1%80%D0%B0%D0%B2\n"
+    );
+    assert_that!(workspace.check_rules(&document, "", true)).is_empty();
+}
+
+#[test]
+fn accepts_a_shared_components_file_referenced_from_another_file() {
+    let workspace = Workspace::new();
+    workspace
+        .write("components.md", format!("# Общие компоненты\n\n{GENERAL}"))
+        .write(
+            "endpoint.md",
+            format!("{LINKED}## Ссылки\n\n[check]: components.md#проверка-прав\n"),
+        );
+    let (code, report) = workspace.check(&["."]);
+    assert_that!((code, common::rule_names(&report))).is_equal_to((Some(0), vec![]));
+}
+
+#[test]
+fn reports_a_shared_component_whose_only_reference_is_excluded_from_the_run() {
+    let workspace = Workspace::new();
+    workspace
+        .write("components.md", format!("# Общие компоненты\n\n{GENERAL}"))
+        .write(
+            "endpoint.md",
+            format!("{LINKED}## Ссылки\n\n[check]: components.md#проверка-прав\n"),
+        );
+    let (_, report) = workspace.check(&["components.md"]);
+    assert_that!(common::rules_with_lines(&report)).is_equal_to(vec![rule("MDS018", 5)]);
+}
