@@ -9,6 +9,7 @@ pub fn validate(document: &Document, path: &Path, config: &Config) -> Vec<Diagno
     let mut diagnostics = Vec::new();
     if config.document.multiple_endpoints {
         validate_endpoints(&document.blocks, path, config, &mut diagnostics);
+        validate_general_components(&document.blocks, path, config, &mut diagnostics);
     } else {
         validate_endpoint(document, path, config, &mut diagnostics);
         diagnostics.extend(validate_sections(&document.blocks, None, path, config));
@@ -30,7 +31,7 @@ fn validate_details(
         }
         let children = children(blocks, index, 3);
         if block.text.trim() == labels.components {
-            validate_components(children, path, labels, diagnostics);
+            diagnostics.extend(validate_components(children, 4, path, labels));
         } else if block.text.trim() == labels.mappings {
             validate_mappings(children, path, labels, diagnostics);
         } else if block.text.trim() == labels.examples {
@@ -114,7 +115,12 @@ fn validate_endpoints(
             Some((heading, name, endpoint))
         })
         .collect();
-    if endpoints.is_empty() && config.document.require_endpoint {
+    if endpoints.is_empty()
+        && config.document.require_endpoint
+        && !blocks
+            .iter()
+            .any(|block| is_general_components(block, &config.labels))
+    {
         diagnostics.push(Diagnostic::error(
             Rule::Mds001,
             path,
@@ -145,7 +151,52 @@ fn validate_endpoints(
     }
 }
 
-fn endpoint_name<'a>(block: &'a Block, labels: &Labels) -> Option<&'a str> {
+pub fn is_general_components(block: &Block, labels: &Labels) -> bool {
+    matches!(block.kind, BlockKind::Heading(2)) && block.text.trim() == labels.components
+}
+
+fn validate_general_components(
+    blocks: &[Block],
+    path: &Path,
+    config: &Config,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let last_endpoint = blocks
+        .iter()
+        .rposition(|block| endpoint_name(block, &config.labels).is_some());
+    let sections = blocks
+        .iter()
+        .enumerate()
+        .filter(|(_, block)| is_general_components(block, &config.labels));
+    for (number, (index, block)) in sections.enumerate() {
+        if number > 0 || last_endpoint.is_some_and(|last| last > index) {
+            diagnostics.push(issue(
+                Rule::Mds004,
+                path,
+                block,
+                format!(
+                    "The H2 {} section must appear once, after every endpoint",
+                    config.labels.components
+                ),
+            ));
+        }
+        let contents = children(blocks, index, 2);
+        if !contents
+            .iter()
+            .any(|child| matches!(child.kind, BlockKind::Heading(3)))
+        {
+            diagnostics.push(issue(
+                Rule::Mds007,
+                path,
+                block,
+                format!("Empty section: {}", config.labels.components),
+            ));
+        }
+        diagnostics.extend(validate_components(contents, 3, path, &config.labels));
+    }
+}
+
+pub fn endpoint_name<'a>(block: &'a Block, labels: &Labels) -> Option<&'a str> {
     if !matches!(block.kind, BlockKind::Heading(2)) {
         return None;
     }
@@ -338,6 +389,7 @@ fn validate_nesting(
     let mut endpoint = !config.document.require_endpoint;
     let mut title_allowed = config.document.multiple_endpoints;
     let mut unchecked = false;
+    let mut general = false;
     for block in &document.blocks {
         let BlockKind::Heading(depth) = block.kind else {
             continue;
@@ -347,13 +399,19 @@ fn validate_nesting(
             2 => {
                 endpoint = true;
                 title_allowed = false;
+                general = config.document.multiple_endpoints
+                    && is_general_components(block, &config.labels);
                 unchecked = config.document.multiple_endpoints
+                    && !general
                     && endpoint_name(block, &config.labels).is_none();
                 section = "";
                 component = false;
                 true
             }
             _ if unchecked => true,
+            3 if general => !block.text.trim().is_empty(),
+            4 if general => block.text.trim() == config.labels.description,
+            _ if general => false,
             3 => {
                 section = block.text.trim();
                 component = false;
@@ -375,8 +433,8 @@ fn validate_nesting(
                 path,
                 block,
                 format!(
-                    "Invalid heading nesting: H2 endpoint, H3 section, H4 component/mapping, H5 {}",
-                    config.labels.description
+                    "Invalid heading nesting: H2 endpoint, H3 section, H4 component/mapping, H5 {}; H2 {}, H3 component, H4 {}",
+                    config.labels.description, config.labels.components, config.labels.description
                 ),
             ));
         }
@@ -393,13 +451,14 @@ fn validate_nesting(
 
 fn validate_components(
     blocks: &[Block],
+    level: u8,
     path: &Path,
     labels: &Labels,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
+) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
     let mut names = HashSet::new();
     for (index, block) in blocks.iter().enumerate() {
-        if !matches!(block.kind, BlockKind::Heading(4)) {
+        if !matches!(block.kind, BlockKind::Heading(depth) if depth == level) {
             continue;
         }
         if !names.insert(block.text.trim()) {
@@ -410,12 +469,12 @@ fn validate_components(
                 format!("Duplicate component name: {}", block.text),
             ));
         }
-        let contents = children(blocks, index, 4);
+        let contents = children(blocks, index, level);
         let descriptions: Vec<_> = contents
             .iter()
             .enumerate()
             .filter(|(_, child)| {
-                matches!(child.kind, BlockKind::Heading(5))
+                matches!(child.kind, BlockKind::Heading(depth) if depth == level + 1)
                     && child.text.trim() == labels.description
             })
             .collect();
@@ -425,14 +484,16 @@ fn validate_components(
                 path,
                 block,
                 format!(
-                    "Component {} is missing H5 {}",
-                    block.text, labels.description
+                    "Component {} is missing H{} {}",
+                    block.text,
+                    level + 1,
+                    labels.description
                 ),
             ));
         }
         for (number, (description_index, description)) in descriptions.iter().enumerate() {
             if number > 0
-                || !children(contents, *description_index, 5)
+                || !children(contents, *description_index, level + 1)
                     .iter()
                     .any(has_content)
             {
@@ -448,6 +509,7 @@ fn validate_components(
             }
         }
     }
+    diagnostics
 }
 
 fn validate_examples(
