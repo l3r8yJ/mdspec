@@ -1,4 +1,5 @@
 mod cli;
+mod components;
 mod config;
 mod diagnostics;
 mod model;
@@ -53,14 +54,14 @@ fn check(
         Err(error) => return Report::new(0, vec![*error]),
     };
     let (files, mut diagnostics) = workspace::discover(inputs, exclude);
-    let mut files_checked = 0;
+    let mut documents = Vec::new();
     for file in files {
         match fs::read_to_string(&file) {
             Ok(source) => {
                 let document = parser::parse(&source);
                 diagnostics.extend(rules::validate(&document, &file, &config));
                 diagnostics.extend(references::validate(&document, &file, &config));
-                files_checked += 1;
+                documents.push((file, document));
             }
             Err(error) => diagnostics.push(Diagnostic::error(
                 Rule::Mds901,
@@ -70,12 +71,13 @@ fn check(
             )),
         }
     }
+    diagnostics.extend(components::validate(&documents, &config));
     if strict || config.diagnostics.warnings_as_errors {
         for diagnostic in &mut diagnostics {
             diagnostic.severity = Severity::Error;
         }
     }
-    Report::new(files_checked, diagnostics)
+    Report::new(documents.len(), diagnostics)
 }
 
 fn load_config(path: Option<&Path>) -> Result<Config, Box<Diagnostic>> {

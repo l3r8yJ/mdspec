@@ -257,7 +257,7 @@ fn check_file(target: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn is_local(url: &str) -> bool {
+pub fn is_local(url: &str) -> bool {
     if url.starts_with("//") {
         return false;
     }
@@ -270,7 +270,7 @@ fn is_local(url: &str) -> bool {
         }))
 }
 
-fn percent_decode(value: &str) -> Option<String> {
+pub fn percent_decode(value: &str) -> Option<String> {
     let mut decoded = Vec::with_capacity(value.len());
     let mut bytes = value.bytes();
     while let Some(byte) = bytes.next() {
@@ -287,8 +287,9 @@ fn percent_decode(value: &str) -> Option<String> {
         .filter(|value| !value.contains('\0'))
 }
 
-fn anchors(document: &Document) -> HashSet<String> {
-    let mut anchors = HashSet::new();
+pub fn heading_anchors(document: &Document) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut ordered = Vec::with_capacity(document.headings.len());
     for (heading, _) in &document.headings {
         let base: String = heading
             .to_lowercase()
@@ -304,15 +305,20 @@ fn anchors(document: &Document) -> HashSet<String> {
             })
             .collect();
         let mut anchor = base.clone();
-        for suffix in 1..=anchors.len() {
-            if !anchors.contains(&anchor) {
+        for suffix in 1..=seen.len() {
+            if !seen.contains(&anchor) {
                 break;
             }
             anchor = format!("{base}-{suffix}");
         }
-        anchors.insert(anchor);
+        seen.insert(anchor.clone());
+        ordered.push(anchor);
     }
-    anchors
+    ordered
+}
+
+fn anchors(document: &Document) -> HashSet<String> {
+    heading_anchors(document).into_iter().collect()
 }
 
 fn target_anchors(target: &Path, cache: &mut TargetCache) -> Result<HashSet<String>, String> {

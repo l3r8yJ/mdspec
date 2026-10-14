@@ -82,6 +82,9 @@ pub fn print(report: &Report, format: Format) -> io::Result<()> {
                     "{severity} {}: {}",
                     diagnostic.rule, diagnostic.message
                 )?;
+                if let Some(help) = &diagnostic.help {
+                    writeln!(output, "help: {help}")?;
+                }
                 writeln!(output)?;
             }
             writeln!(
