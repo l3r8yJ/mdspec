@@ -1,6 +1,6 @@
 # Always allow multiple endpoints
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 130
 - TAGS: refactor,v0.2.0
 
