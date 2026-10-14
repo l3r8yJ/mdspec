@@ -4,9 +4,24 @@
 - PRIORITY: 120
 - TAGS: v0.1.5
 
-Now components block have to be inside of endpoint description, but better approac is to make it 
-mutual on single files, like components itself can also be mutual so dot link them to certain endpoint logic.
-But better would be if they would call "General" or "Common" components ("Общие" in russian); and components inside of 
-endpoint better would be called an "Internal" components. We have to allow "General" components be mandatory used somewhere,
-i.e. something have to be linked to such component - error otherwise. For endpoint components rule work backwards - it cannot be used
-anywhere except of it endpoint. If such thing found suggest to move to general components OR stop referring to it - also error.
+
+Currently, components must be defined inside an endpoint description. However, a better approach would be to support **shared components** that are defined independently and are not tied to a specific endpoint.
+
+We should introduce two types of components:
+
+### 1. General (Common) Components
+- Defined separately from endpoints.
+- Can be referenced by multiple endpoints or other components.
+- Must be referenced at least once somewhere in the project.
+- **Validation error:** If a General component is not referenced anywhere, report an error.
+
+### 2. Internal Components
+- Defined inside a specific endpoint.
+- Can only be used within the endpoint where they are defined.
+- Cannot be referenced by other endpoints or external components.
+- **Validation error:** If an Internal component is referenced outside its endpoint, report an error and suggest either:
+  - Moving the component to General Components.
+  - Removing the invalid reference.
+
+### Summary
+The main goal is to clearly separate **reusable components (General)** from **endpoint-specific components (Internal)** and enforce their usage rules through validation.
