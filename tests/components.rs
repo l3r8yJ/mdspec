@@ -314,6 +314,15 @@ fn reports_an_internal_component_linked_from_a_preamble_or_a_non_endpoint_sectio
 }
 
 #[test]
+fn does_not_declare_internal_components_under_a_non_endpoint_section() {
+    let workspace = Workspace::new();
+    let shared =
+        "## Общие правила\n\n### Компоненты\n\n#### Проверка прав\n\nПроверить доступ.\n\n";
+    let document = format!("{LINKED}{shared}{REFERENCES}");
+    assert_that!(workspace.check_rules(&document, "", true)).is_empty();
+}
+
+#[test]
 fn rejects_a_general_component_heading_without_a_name() {
     let workspace = Workspace::new();
     let document =
