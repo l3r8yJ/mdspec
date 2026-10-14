@@ -201,25 +201,6 @@ fn issue(rule: Rule, path: &Path, block: &Block, message: impl Into<String>) -> 
     Diagnostic::error(rule, path, Some(block.span.start), message)
 }
 
-pub fn is_general_components(block: &Block, labels: &Labels) -> bool {
-    matches!(block.kind, BlockKind::Heading { level: 2, .. })
-        && block.text.trim() == labels.components
-}
-
-pub fn is_general_references(block: &Block, level: u8, labels: &Labels) -> bool {
-    level == 3
-        && matches!(block.kind, BlockKind::Heading { level: 3, .. })
-        && block.text.trim() == labels.references
-}
-
-pub fn is_endpoint(block: &Block, labels: &Labels) -> bool {
-    matches!(block.kind, BlockKind::Heading { level: 2, .. })
-        && block
-            .text
-            .trim()
-            .starts_with(labels.endpoint_prefix.as_str())
-}
-
 fn valid_path(text: &str, labels: &Labels) -> bool {
     let Some(value) = text.trim().strip_prefix(labels.path_prefix.as_str()) else {
         return false;

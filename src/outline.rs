@@ -12,7 +12,7 @@ pub struct Outline<'a> {
 pub enum Part<'a> {
     Endpoint(Endpoint<'a>),
     General(General<'a>),
-    Other,
+    Other(&'a Block),
 }
 
 pub struct Endpoint<'a> {
@@ -20,6 +20,7 @@ pub struct Endpoint<'a> {
     pub name: &'a str,
     pub intro: &'a [Block],
     pub sections: Vec<Section<'a>>,
+    pub detached: Vec<Section<'a>>,
 }
 
 pub struct General<'a> {
@@ -76,18 +77,36 @@ impl SectionKind {
     }
 }
 
+impl<'a> Part<'a> {
+    pub const fn heading(&self) -> &'a Block {
+        match self {
+            Self::Endpoint(endpoint) => endpoint.heading,
+            Self::General(general) => general.heading,
+            Self::Other(heading) => heading,
+        }
+    }
+}
+
 impl<'a> Outline<'a> {
+    pub fn part_at(&self, offset: usize) -> Option<(usize, &Part<'a>)> {
+        self.parts
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, part)| (..=offset).contains(&part.heading().span.start.offset))
+    }
+
     pub fn endpoints(&self) -> impl Iterator<Item = &Endpoint<'a>> {
         self.parts.iter().filter_map(|part| match part {
             Part::Endpoint(endpoint) => Some(endpoint),
-            Part::General(_) | Part::Other => None,
+            Part::General(_) | Part::Other(_) => None,
         })
     }
 
     pub fn general(&self) -> impl Iterator<Item = &General<'a>> {
         self.parts.iter().filter_map(|part| match part {
             Part::General(general) => Some(general),
-            Part::Endpoint(_) | Part::Other => None,
+            Part::Endpoint(_) | Part::Other(_) => None,
         })
     }
 }
@@ -101,13 +120,20 @@ pub fn children(blocks: &[Block], index: usize, depth: u8) -> &[Block] {
     rest.get(..length).unwrap_or_default()
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Target {
+    Sections,
+    Detached,
+    Closed,
+}
+
 struct Builder<'a, 'l> {
     blocks: &'a [Block],
     labels: &'l Labels,
     outline: Outline<'a>,
     current_section: Option<SectionKind>,
     in_component: bool,
-    attaching_to_part: bool,
+    target: Target,
 }
 
 pub fn build<'a>(document: &'a Document, labels: &Labels) -> Outline<'a> {
@@ -123,7 +149,7 @@ pub fn build<'a>(document: &'a Document, labels: &Labels) -> Outline<'a> {
         },
         current_section: None,
         in_component: false,
-        attaching_to_part: true,
+        target: Target::Sections,
     };
     for (index, block) in document.blocks.iter().enumerate() {
         if let BlockKind::Heading { level, .. } = block.kind {
@@ -143,7 +169,7 @@ impl<'a> Builder<'a, '_> {
                 true
             }
             _ => match self.outline.parts.last() {
-                Some(Part::Other) => true,
+                Some(Part::Other(_)) => true,
                 Some(Part::General(_)) => self.accept_general_heading(index, heading, level),
                 Some(Part::Endpoint(_)) | None => {
                     self.accept_endpoint_heading(index, heading, level)
@@ -172,7 +198,7 @@ impl<'a> Builder<'a, '_> {
     const fn accept_title(&mut self) -> bool {
         let first = self.outline.parts.is_empty();
         if !first {
-            self.attaching_to_part = false;
+            self.target = Target::Closed;
         }
         first
     }
@@ -186,19 +212,20 @@ impl<'a> Builder<'a, '_> {
             })
         } else {
             name.strip_prefix(self.labels.endpoint_prefix.as_str())
-                .map_or(Part::Other, |name| {
+                .map_or(Part::Other(heading), |name| {
                     Part::Endpoint(Endpoint {
                         heading,
                         name: name.trim(),
                         intro: children(self.blocks, index, 3),
                         sections: Vec::new(),
+                        detached: Vec::new(),
                     })
                 })
         };
         self.outline.parts.push(part);
         self.current_section = None;
         self.in_component = false;
-        self.attaching_to_part = true;
+        self.target = Target::Sections;
     }
 
     fn accept_general_heading(&mut self, index: usize, heading: &'a Block, level: u8) -> bool {
@@ -216,7 +243,7 @@ impl<'a> Builder<'a, '_> {
     }
 
     fn attach_general_item(&mut self, index: usize, heading: &'a Block) {
-        if !self.attaching_to_part {
+        if self.target != Target::Sections {
             return;
         }
         if let Some(Part::General(general)) = self.outline.parts.last_mut() {
@@ -248,29 +275,35 @@ impl<'a> Builder<'a, '_> {
         let kind = SectionKind::of(heading.text.trim(), self.labels);
         self.current_section = Some(kind);
         self.in_component = false;
+        let section = Section {
+            heading,
+            kind,
+            body: children(self.blocks, index, 3),
+            items: Vec::new(),
+        };
         match self.outline.parts.last_mut() {
             None => self.outline.preamble.push(heading),
-            Some(Part::Endpoint(endpoint)) if self.attaching_to_part => {
-                endpoint.sections.push(Section {
-                    heading,
-                    kind,
-                    body: children(self.blocks, index, 3),
-                    items: Vec::new(),
-                });
+            Some(Part::Endpoint(endpoint)) if self.target == Target::Sections => {
+                endpoint.sections.push(section);
             }
-            Some(Part::Endpoint(_) | Part::General(_) | Part::Other) => {}
+            Some(Part::Endpoint(endpoint)) => {
+                endpoint.detached.push(section);
+                self.target = Target::Detached;
+            }
+            Some(Part::General(_) | Part::Other(_)) => {}
         }
     }
 
     fn attach_section_item(&mut self, index: usize, heading: &'a Block) {
-        if !self.attaching_to_part {
-            return;
-        }
         let Some(Part::Endpoint(endpoint)) = self.outline.parts.last_mut() else {
             return;
         };
-        if let Some(section) = endpoint
-            .sections
+        let sections = match self.target {
+            Target::Sections => &mut endpoint.sections,
+            Target::Detached => &mut endpoint.detached,
+            Target::Closed => return,
+        };
+        if let Some(section) = sections
             .last_mut()
             .filter(|section| section.kind.has_items())
         {

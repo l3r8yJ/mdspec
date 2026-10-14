@@ -16,7 +16,10 @@ pub fn validate(outline: &Outline, path: &Path, config: &Config) -> Vec<Diagnost
 fn endpoint_headings(outline: &Outline, path: &Path, config: &Config) -> Vec<Diagnostic> {
     let prefix = &config.labels.endpoint_prefix;
     let missing = config.document.require_endpoint
-        && outline.parts.iter().all(|part| matches!(part, Part::Other));
+        && outline
+            .parts
+            .iter()
+            .all(|part| matches!(part, Part::Other(_)));
     let missing = missing.then(|| {
         Diagnostic::error(
             Rule::Mds001,
@@ -46,7 +49,7 @@ fn placement(outline: &Outline, path: &Path, config: &Config) -> Vec<Diagnostic>
         .enumerate()
         .filter_map(|(index, part)| match part {
             Part::General(general) => Some((index, general)),
-            Part::Endpoint(_) | Part::Other => None,
+            Part::Endpoint(_) | Part::Other(_) => None,
         })
         .enumerate()
         .filter(|(number, (index, _))| {
