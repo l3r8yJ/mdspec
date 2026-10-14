@@ -2,7 +2,7 @@
 
 - STATUS: CLOSED
 - PRIORITY: 130
-- TAGS: refactor,v0.2.0
+- TAGS: refactor,v0.1.5
 
 `document.multiple_endpoints` forks validation into two code paths across `rules.rs`, `references.rs` and `components.rs`. Single-endpoint mode is a special case nobody needs: a document with one endpoint is already valid in multiple-endpoint mode.
 
