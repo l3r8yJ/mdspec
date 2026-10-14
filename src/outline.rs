@@ -74,9 +74,9 @@ impl<'a> Outline<'a> {
 struct Builder<'a, 'l> {
     labels: &'l Labels,
     outline: Outline<'a>,
-    section: Option<SectionKind>,
-    component: bool,
-    attached: bool,
+    current_section: Option<SectionKind>,
+    in_component: bool,
+    attaching_sections: bool,
 }
 
 pub fn build<'a>(document: &'a Document, labels: &Labels) -> Outline<'a> {
@@ -88,30 +88,30 @@ pub fn build<'a>(document: &'a Document, labels: &Labels) -> Outline<'a> {
             stray: Vec::new(),
             nested: &document.nested_headings,
         },
-        section: None,
-        component: false,
-        attached: true,
+        current_section: None,
+        in_component: false,
+        attaching_sections: true,
     };
     for block in &document.blocks {
         if let BlockKind::Heading { level, .. } = block.kind {
-            builder.heading(block, level);
+            builder.place(block, level);
         }
     }
     builder.outline
 }
 
 impl<'a> Builder<'a, '_> {
-    fn heading(&mut self, heading: &'a Block, level: u8) {
+    fn place(&mut self, heading: &'a Block, level: u8) {
         let fits = match level {
-            1 => self.title(),
+            1 => self.accept_title(),
             2 => {
-                self.part(heading);
+                self.open_part(heading);
                 true
             }
             _ => match self.outline.parts.last() {
                 Some(Part::Other) => true,
-                Some(Part::General(_)) => self.general(heading, level),
-                Some(Part::Endpoint(_)) | None => self.section(heading, level),
+                Some(Part::General(_)) => self.fits_general(heading, level),
+                Some(Part::Endpoint(_)) | None => self.accept_endpoint_heading(heading, level),
             },
         };
         if !fits {
@@ -119,15 +119,15 @@ impl<'a> Builder<'a, '_> {
         }
     }
 
-    const fn title(&mut self) -> bool {
+    const fn accept_title(&mut self) -> bool {
         let first = self.outline.parts.is_empty();
         if !first {
-            self.attached = false;
+            self.attaching_sections = false;
         }
         first
     }
 
-    fn part(&mut self, heading: &'a Block) {
+    fn open_part(&mut self, heading: &'a Block) {
         let name = heading.text.trim();
         let part = if name == self.labels.components {
             Part::General(General { heading })
@@ -142,12 +142,12 @@ impl<'a> Builder<'a, '_> {
                 })
         };
         self.outline.parts.push(part);
-        self.section = None;
-        self.component = false;
-        self.attached = true;
+        self.current_section = None;
+        self.in_component = false;
+        self.attaching_sections = true;
     }
 
-    fn general(&self, heading: &Block, level: u8) -> bool {
+    fn fits_general(&self, heading: &Block, level: u8) -> bool {
         let name = heading.text.trim();
         match level {
             3 => !name.is_empty(),
@@ -156,29 +156,29 @@ impl<'a> Builder<'a, '_> {
         }
     }
 
-    fn section(&mut self, heading: &'a Block, level: u8) -> bool {
+    fn accept_endpoint_heading(&mut self, heading: &'a Block, level: u8) -> bool {
         let name = heading.text.trim();
         match level {
             3 => {
-                self.open(heading);
+                self.open_section(heading);
                 true
             }
             4 => {
-                self.component = self.section == Some(SectionKind::Components);
-                self.section.is_some_and(SectionKind::has_items) && !name.is_empty()
+                self.in_component = self.current_section == Some(SectionKind::Components);
+                self.current_section.is_some_and(SectionKind::has_items) && !name.is_empty()
             }
-            5 => self.component && name == self.labels.description,
+            5 => self.in_component && name == self.labels.description,
             _ => false,
         }
     }
 
-    fn open(&mut self, heading: &'a Block) {
+    fn open_section(&mut self, heading: &'a Block) {
         let kind = SectionKind::of(heading.text.trim(), self.labels);
-        self.section = Some(kind);
-        self.component = false;
+        self.current_section = Some(kind);
+        self.in_component = false;
         match self.outline.parts.last_mut() {
             None => self.outline.preamble.push(heading),
-            Some(Part::Endpoint(endpoint)) if self.attached => {
+            Some(Part::Endpoint(endpoint)) if self.attaching_sections => {
                 endpoint.sections.push(Section { heading, kind });
             }
             Some(Part::Endpoint(_) | Part::General(_) | Part::Other) => {}
