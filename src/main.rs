@@ -3,11 +3,13 @@ mod components;
 mod config;
 mod diagnostics;
 mod model;
+mod outline;
 mod parser;
 mod references;
 mod reporter;
 mod rule;
 mod rules;
+mod structure;
 mod workspace;
 
 use clap::Parser;
@@ -59,6 +61,8 @@ fn check(
         match fs::read_to_string(&file) {
             Ok(source) => {
                 let document = parser::parse(&source);
+                let outline = outline::build(&document, &config.labels);
+                diagnostics.extend(structure::validate(&outline, &file, &config));
                 diagnostics.extend(rules::validate(&document, &file, &config));
                 diagnostics.extend(references::validate(&document, &file, &config));
                 documents.push((file, document));

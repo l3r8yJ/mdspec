@@ -9,7 +9,6 @@ pub fn validate(document: &Document, path: &Path, config: &Config) -> Vec<Diagno
     let mut diagnostics = Vec::new();
     validate_endpoints(&document.blocks, path, config, &mut diagnostics);
     validate_general_components(&document.blocks, path, config, &mut diagnostics);
-    validate_nesting(document, path, config, &mut diagnostics);
     diagnostics
 }
 
@@ -57,36 +56,12 @@ fn validate_endpoints(
         .iter()
         .enumerate()
         .filter_map(|(index, heading)| {
-            let name = endpoint_name(heading, &config.labels)?;
+            endpoint_name(heading, &config.labels)?;
             let endpoint = blocks.get(index..=index + children(blocks, index, 2).len())?;
-            Some((heading, name, endpoint))
+            Some((heading, endpoint))
         })
         .collect();
-    if endpoints.is_empty()
-        && config.document.require_endpoint
-        && !blocks
-            .iter()
-            .any(|block| is_general_components(block, &config.labels))
-    {
-        diagnostics.push(Diagnostic::error(
-            Rule::Mds001,
-            path,
-            None,
-            format!("Missing H2 heading: {} name", config.labels.endpoint_prefix),
-        ));
-    }
-    for (heading, name, endpoint) in endpoints {
-        if name.is_empty() {
-            diagnostics.push(issue(
-                Rule::Mds001,
-                path,
-                heading,
-                format!(
-                    "Expected H2 heading: {} name",
-                    config.labels.endpoint_prefix
-                ),
-            ));
-        }
+    for (heading, endpoint) in endpoints {
         diagnostics.extend(validate_path(endpoint, path, config));
         diagnostics.extend(validate_sections(
             endpoint,
@@ -119,22 +94,7 @@ fn validate_general_components(
         .iter()
         .enumerate()
         .filter(|(_, block)| is_general_components(block, &config.labels));
-    for (number, (index, block)) in sections.enumerate() {
-        let endpoint_follows = blocks.get(index..).is_some_and(|rest| {
-            rest.iter()
-                .any(|block| endpoint_name(block, &config.labels).is_some())
-        });
-        if number > 0 || endpoint_follows {
-            diagnostics.push(issue(
-                Rule::Mds004,
-                path,
-                block,
-                format!(
-                    "The H2 {} section must appear once, after every endpoint",
-                    config.labels.components
-                ),
-            ));
-        }
+    for (index, block) in sections {
         let contents = children(blocks, index, 2);
         if !contents.iter().any(|child| {
             matches!(child.kind, BlockKind::Heading { level: 3, .. })
@@ -236,14 +196,6 @@ fn validate_sections(
             .iter()
             .position(|section| *section == name)
         else {
-            if !config.document.allow_unknown_sections {
-                diagnostics.push(issue(
-                    Rule::Mds006,
-                    path,
-                    block,
-                    format!("Unknown section: {name}"),
-                ));
-            }
             continue;
         };
         let unique = seen.insert(name);
@@ -324,73 +276,6 @@ fn has_content(block: &Block) -> bool {
         block.kind,
         BlockKind::Paragraph | BlockKind::Code | BlockKind::Content | BlockKind::Table(_)
     ) && !block.text.trim().is_empty()
-}
-
-fn validate_nesting(
-    document: &Document,
-    path: &Path,
-    config: &Config,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
-    let mut section = "";
-    let mut component = false;
-    let mut endpoint = !config.document.require_endpoint;
-    let mut title_allowed = true;
-    let mut unchecked = false;
-    let mut general = false;
-    for block in &document.blocks {
-        let BlockKind::Heading { level: depth, .. } = block.kind else {
-            continue;
-        };
-        let valid = match depth {
-            1 => title_allowed,
-            2 => {
-                endpoint = true;
-                title_allowed = false;
-                general = is_general_components(block, &config.labels);
-                unchecked = !general && endpoint_name(block, &config.labels).is_none();
-                section = "";
-                component = false;
-                true
-            }
-            _ if unchecked => true,
-            3 if general => !block.text.trim().is_empty(),
-            4 if general => block.text.trim() == config.labels.description,
-            3 => {
-                section = block.text.trim();
-                component = false;
-                endpoint
-            }
-            4 => {
-                component = section == config.labels.components;
-                (component
-                    || section == config.labels.mappings
-                    || section == config.labels.examples)
-                    && !block.text.trim().is_empty()
-            }
-            5 => component && block.text.trim() == config.labels.description,
-            _ => false,
-        };
-        if !valid {
-            diagnostics.push(issue(
-                Rule::Mds005,
-                path,
-                block,
-                format!(
-                    "Invalid heading nesting: H2 endpoint, H3 section, H4 component/mapping, H5 {}; H2 {}, H3 component, H4 {}",
-                    config.labels.description, config.labels.components, config.labels.description
-                ),
-            ));
-        }
-    }
-    diagnostics.extend(document.nested_headings.iter().map(|heading| {
-        Diagnostic::error(
-            Rule::Mds005,
-            path,
-            Some(heading.position),
-            "Structural headings must not occur inside lists or blockquotes",
-        )
-    }));
 }
 
 fn validate_components(
