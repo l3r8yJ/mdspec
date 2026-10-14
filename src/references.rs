@@ -120,7 +120,7 @@ impl Validation<'_> {
         {
             self.error(
                 Rule::Mds015,
-                Some(block.position),
+                Some(block.span.start),
                 format!(
                     "Only reference definitions are allowed after the {} heading",
                     self.config.labels.references
@@ -237,7 +237,9 @@ fn definition_is_terminal(section: &[Block], offset: usize) -> bool {
     section
         .iter()
         .all(|block| matches!(block.kind, BlockKind::Definition))
-        && section.iter().any(|block| block.position.offset == offset)
+        && section
+            .iter()
+            .any(|block| block.span.start.offset == offset)
 }
 
 fn check_file(target: &Path) -> Result<(), String> {

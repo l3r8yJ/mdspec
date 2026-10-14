@@ -5,11 +5,16 @@ pub struct Position {
     pub offset: usize,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct Span {
+    pub start: Position,
+    pub end: Position,
+}
+
 #[derive(Debug)]
 pub struct Block {
     pub kind: BlockKind,
-    pub position: Position,
-    pub end: usize,
+    pub span: Span,
     pub text: String,
 }
 

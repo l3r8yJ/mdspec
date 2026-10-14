@@ -1,4 +1,4 @@
-use crate::model::{Block, BlockKind, Definition, Document, Link, NestedHeading, Position};
+use crate::model::{Block, BlockKind, Definition, Document, Link, NestedHeading, Position, Span};
 use pulldown_cmark::{BrokenLink, CodeBlockKind, Event, LinkType, Options, Parser, Tag, TagEnd};
 use std::collections::HashSet;
 
@@ -54,17 +54,19 @@ pub fn parse(source: &str) -> Document {
         if !document
             .blocks
             .iter()
-            .any(|block| (block.position.offset..block.end).contains(&span.start))
+            .any(|block| (block.span.start.offset..block.span.end.offset).contains(&span.start))
         {
             document.blocks.push(Block {
                 kind: BlockKind::Definition,
-                position: positions.at(span.start),
-                end: span.end,
+                span: Span {
+                    start: positions.at(span.start),
+                    end: positions.at(span.end),
+                },
                 text: String::new(),
             });
         }
     }
-    document.blocks.sort_by_key(|block| block.position.offset);
+    document.blocks.sort_by_key(|block| block.span.start.offset);
     document
 }
 
@@ -111,8 +113,10 @@ impl ParseState<'_> {
                 if self.depth == 0 {
                     self.document.blocks.push(Block {
                         kind: BlockKind::Content,
-                        position: start,
-                        end: span.end,
+                        span: Span {
+                            start,
+                            end: self.positions.at(span.end),
+                        },
                         text: text.to_string(),
                     });
                 } else if let Some(block) = self.document.blocks.last_mut() {
@@ -128,8 +132,10 @@ impl ParseState<'_> {
             Event::SoftBreak | Event::HardBreak => self.line_break(),
             Event::Rule if self.depth == 0 => self.document.blocks.push(Block {
                 kind: BlockKind::Content,
-                position: start,
-                end: span.end,
+                span: Span {
+                    start,
+                    end: self.positions.at(span.end),
+                },
                 text: String::new(),
             }),
             _ => {}
@@ -174,8 +180,10 @@ impl ParseState<'_> {
             };
             self.document.blocks.push(Block {
                 kind,
-                position: start,
-                end: span.end,
+                span: Span {
+                    start,
+                    end: self.positions.at(span.end),
+                },
                 text: String::new(),
             });
         }

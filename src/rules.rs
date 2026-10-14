@@ -44,7 +44,7 @@ pub fn children(blocks: &[Block], index: usize, depth: u8) -> &[Block] {
 }
 
 fn issue(rule: Rule, path: &Path, block: &Block, message: impl Into<String>) -> Diagnostic {
-    Diagnostic::error(rule, path, Some(block.position), message)
+    Diagnostic::error(rule, path, Some(block.span.start), message)
 }
 
 fn validate_endpoints(
@@ -88,7 +88,12 @@ fn validate_endpoints(
             ));
         }
         diagnostics.extend(validate_path(endpoint, path, config));
-        diagnostics.extend(validate_sections(endpoint, heading.position, path, config));
+        diagnostics.extend(validate_sections(
+            endpoint,
+            heading.span.start,
+            path,
+            config,
+        ));
         validate_details(endpoint, path, &config.labels, diagnostics);
     }
 }
@@ -175,7 +180,7 @@ fn validate_path(blocks: &[Block], path: &Path, config: &Config) -> Vec<Diagnost
         diagnostics.push(Diagnostic::error(
             Rule::Mds002,
             path,
-            blocks.first().map(|block| block.position),
+            blocks.first().map(|block| block.span.start),
             format!("Missing {} METHOD /path", config.labels.path_prefix),
         ));
     }
