@@ -299,3 +299,11 @@ fn reports_an_internal_component_linked_from_a_preamble_or_a_non_endpoint_sectio
     assert_that!(workspace.check_rules(&document, "", true))
         .is_equal_to(vec![rule("MDS019", 3), rule("MDS019", 7)]);
 }
+
+#[test]
+fn rejects_a_general_component_heading_without_a_name() {
+    let workspace = Workspace::new();
+    let document =
+        format!("{LINKED}## Компоненты\n\n### \n\n#### Описание\n\nТекст.\n\n{REFERENCES}");
+    assert_that!(workspace.check_rules(&document, "", true)).contains(rule("MDS005", 11));
+}
