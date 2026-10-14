@@ -80,6 +80,7 @@ Only a file passed with `--config` is read. Unknown keys are errors. All keys an
 - `document.allow_unknown_sections = false` rejects sections not listed in `[labels]`.
 - `document.require_examples = true` requires the examples section.
 - `document.multiple_endpoints = false` allows exactly one endpoint per document. By default every `## <endpoint_prefix> name` heading starts an endpoint that runs to the next H2. Section and component rules apply per endpoint. An optional H1 title and other H2 sections such as general rules are not checked. Link definitions go in each endpoint's references section or in one H2 references section at the end of the document.
+- Components come in two kinds, both needing `document.multiple_endpoints = true`. Internal components live in an endpoint's `### Components` section and may only be linked from that endpoint. General components live in one `## Components` section after the last endpoint and before `## References`, or in a separate file with no endpoint, and every one must be linked at least once from an endpoint or another component. Only files in the same `mdspec check` run count.
 - `references.require_reference_style = false` allows inline local links.
 - `references.definitions_at_end = false` allows definitions anywhere.
 - `references.toc_allowed = true` accepts a paragraph that is only `[TOC]` or `[[_TOC_]]` as a table of contents marker instead of an undefined reference.
@@ -393,6 +394,76 @@ Incorrect:
 
 Accept: application/json
 ````
+
+### MDS018 Referenced general components
+
+Every general component must be linked from an endpoint or another component.
+
+Correct:
+
+```md
+## Endpoint: List items
+
+Path: `GET /v1/items`
+
+### Logic
+
+1. [Check access][access].
+
+## Components
+
+### Check access
+
+#### Description
+
+Verify the caller token.
+
+## References
+
+[access]: #check-access
+```
+
+Incorrect:
+
+```md
+## Components
+
+### Check access
+
+#### Description
+
+Verify the caller token.
+```
+
+### MDS019 Internal component scope
+
+An internal component may only be linked from its own endpoint. Move it to the general components section to share it.
+
+Correct:
+
+```md
+## Components
+
+### Load items
+
+#### Description
+
+Read the items.
+```
+
+Incorrect, because it links to the internal `#### Load items` component of another endpoint:
+
+```md
+## Endpoint: Create item
+
+Path: `POST /v1/items`
+
+### Logic
+
+1. [Load items][load] first.
+
+[load]: #load-items
+```
 
 ### MDS900 Configuration
 

@@ -50,3 +50,14 @@ fn accepts_the_quick_start_document_with_the_documented_examples() {
     );
     assert_that!(report["diagnostics"].clone()).is_equal_to(serde_json::json!([]));
 }
+
+#[test]
+fn accepts_the_documented_general_component_example() {
+    let workspace = Workspace::new();
+    let (_, report) = workspace.check_document(
+        block_after("### MDS018 Referenced general components", "```md"),
+        block_after("save this as `mdspec.toml`:", "```toml"),
+        true,
+    );
+    assert_that!(report["diagnostics"].clone()).is_equal_to(serde_json::json!([]));
+}
