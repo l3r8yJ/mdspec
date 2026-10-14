@@ -217,26 +217,20 @@ fn checked_links<'a>(document: &'a Document, config: &'a Config) -> impl Iterato
 }
 
 fn reference_sections<'a>(document: &'a Document, config: &Config) -> Vec<&'a [Block]> {
-    let multiple = config.document.multiple_endpoints;
-    let sections = document
+    document
         .blocks
         .iter()
         .enumerate()
         .filter(|(_, block)| block.text.trim() == config.labels.references)
         .filter_map(|(index, block)| {
             let extent = match block.kind {
-                BlockKind::Heading(3) if multiple => 2,
-                BlockKind::Heading(3) => 0,
-                BlockKind::Heading(2) if multiple => 0,
+                BlockKind::Heading(3) => 2,
+                BlockKind::Heading(2) => 0,
                 _ => return None,
             };
             Some(rules::children(&document.blocks, index, extent))
-        });
-    if multiple {
-        sections.collect()
-    } else {
-        sections.take(1).collect()
-    }
+        })
+        .collect()
 }
 
 fn definition_is_terminal(section: &[Block], offset: usize) -> bool {

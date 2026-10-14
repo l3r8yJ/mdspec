@@ -126,3 +126,17 @@ fn preserves_default_labels_when_only_one_label_is_overridden() {
     assert_that!(code).is_equal_to(Some(0));
     assert_that!(report["error_count"].as_u64()).is_equal_to(Some(0));
 }
+
+#[test]
+fn rejects_the_removed_multiple_endpoints_key() {
+    let (code, report) = config_check("[document]\nmultiple_endpoints = true\n");
+    let diagnostic = &report["diagnostics"][0];
+    assert_that!(code).is_equal_to(Some(2));
+    assert_that!(diagnostic["rule"].as_str()).is_equal_to(Some("MDS900"));
+    assert_that!(
+        diagnostic["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("multiple_endpoints"))
+    )
+    .is_true();
+}
