@@ -225,3 +225,38 @@ fn prints_the_suggested_fix_in_text_output() {
     assert_that!(String::from_utf8_lossy(&output.stderr).into_owned())
         .contains("help: Move Загрузка to the H2 Компоненты section or remove the link");
 }
+
+#[test]
+fn ignores_an_h4_heading_outside_the_components_section_when_scoping_internal_components() {
+    let workspace = Workspace::new();
+    let owner = PLAIN.replace("Текст.", "Текст.\n\n#### Загрузка\n\nТекст.");
+    let borrower = LINKED.replace("Проверить права][check]", "Загрузка][load]");
+    let document = format!("{owner}{borrower}## Ссылки\n\n[load]: #загрузка\n");
+    assert_that!(workspace.check_rules(&document, "", true)).is_equal_to(vec![rule("MDS005", 9)]);
+}
+
+#[test]
+fn names_the_expected_heading_level_of_a_missing_component_description() {
+    let workspace = Workspace::new();
+    let internal = PLAIN.replace(
+        "Текст.",
+        "Текст.\n\n### Компоненты\n\n#### Загрузка\n\nТекст.",
+    );
+    let document =
+        format!("{internal}{LINKED}## Компоненты\n\n### Проверка прав\n\nТекст.\n\n{REFERENCES}");
+    let (_, report) = workspace.check_document(&document, "", true);
+    let messages: Vec<_> = common::diagnostics(&report)
+        .iter()
+        .filter(|diagnostic| diagnostic["rule"] == "MDS008")
+        .map(|diagnostic| {
+            diagnostic["message"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned()
+        })
+        .collect();
+    assert_that!(messages).is_equal_to(vec![
+        "Component Загрузка is missing H5 Описание".to_owned(),
+        "Component Проверка прав is missing H4 Описание".to_owned(),
+    ]);
+}
