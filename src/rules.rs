@@ -161,15 +161,16 @@ fn validate_general_components(
     config: &Config,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    let last_endpoint = blocks
-        .iter()
-        .rposition(|block| endpoint_name(block, &config.labels).is_some());
     let sections = blocks
         .iter()
         .enumerate()
         .filter(|(_, block)| is_general_components(block, &config.labels));
     for (number, (index, block)) in sections.enumerate() {
-        if number > 0 || last_endpoint.is_some_and(|last| last > index) {
+        let endpoint_follows = blocks.get(index..).is_some_and(|rest| {
+            rest.iter()
+                .any(|block| endpoint_name(block, &config.labels).is_some())
+        });
+        if number > 0 || endpoint_follows {
             diagnostics.push(issue(
                 Rule::Mds004,
                 path,
@@ -411,7 +412,6 @@ fn validate_nesting(
             _ if unchecked => true,
             3 if general => !block.text.trim().is_empty(),
             4 if general => block.text.trim() == config.labels.description,
-            _ if general => false,
             3 => {
                 section = block.text.trim();
                 component = false;
