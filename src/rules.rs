@@ -188,10 +188,10 @@ fn validate_general_components(
             ));
         }
         let contents = children(blocks, index, 2);
-        if !contents
-            .iter()
-            .any(|child| matches!(child.kind, BlockKind::Heading(3)))
-        {
+        if !contents.iter().any(|child| {
+            matches!(child.kind, BlockKind::Heading(3))
+                && !is_general_references(child, 3, &config.labels)
+        }) {
             diagnostics.push(issue(
                 Rule::Mds007,
                 path,

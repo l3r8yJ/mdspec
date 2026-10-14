@@ -41,6 +41,27 @@ fn rejects_an_empty_general_components_section() {
 }
 
 #[test]
+fn rejects_a_general_components_section_that_holds_only_references() {
+    let workspace = Workspace::new();
+    let document = format!(
+        "{LINKED}## Компоненты
+
+### Ссылки
+
+[check]: #эндпоинт-а
+"
+    );
+    assert_that!(workspace.check_rules(&document, "", true)).is_equal_to(vec![rule("MDS007", 9)]);
+}
+
+#[test]
+fn rejects_a_general_components_section_that_holds_only_an_empty_references_block() {
+    let workspace = Workspace::new();
+    let document = format!("{PLAIN}## Компоненты\n\n### Ссылки\n");
+    assert_that!(workspace.check_rules(&document, "", true)).is_equal_to(vec![rule("MDS007", 9)]);
+}
+
+#[test]
 fn rejects_a_general_component_without_a_description() {
     let workspace = Workspace::new();
     let document =
