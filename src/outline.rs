@@ -111,6 +111,8 @@ impl<'a> Outline<'a> {
     }
 }
 
+const TO_END_OF_DOCUMENT: u8 = 0;
+
 pub fn children(blocks: &[Block], index: usize, depth: u8) -> &[Block] {
     let rest = blocks.get(index + 1..).unwrap_or_default();
     let length = rest
@@ -186,7 +188,7 @@ impl<'a> Builder<'a, '_> {
             return;
         }
         let ends_before_level = match level {
-            2 => 0,
+            2 => TO_END_OF_DOCUMENT,
             3 => 2,
             _ => return,
         };
