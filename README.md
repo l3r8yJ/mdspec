@@ -442,18 +442,46 @@ An internal component may only be linked from its own endpoint. Move it to the g
 Correct:
 
 ```md
-## Components
+## Endpoint: List items
 
-### Load items
+Path: `GET /v1/items`
 
-#### Description
+### Logic
+
+1. [Load items][load] first.
+
+### Components
+
+#### Load items
+
+##### Description
 
 Read the items.
+
+### References
+
+[load]: #load-items
 ```
 
-Incorrect, because it links to the internal `#### Load items` component of another endpoint:
+Incorrect:
 
 ```md
+## Endpoint: List items
+
+Path: `GET /v1/items`
+
+### Logic
+
+1. Return the items.
+
+### Components
+
+#### Load items
+
+##### Description
+
+Read the items.
+
 ## Endpoint: Create item
 
 Path: `POST /v1/items`
@@ -461,6 +489,8 @@ Path: `POST /v1/items`
 ### Logic
 
 1. [Load items][load] first.
+
+### References
 
 [load]: #load-items
 ```

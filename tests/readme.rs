@@ -61,3 +61,25 @@ fn accepts_the_documented_general_component_example() {
     );
     assert_that!(report["diagnostics"].clone()).is_equal_to(serde_json::json!([]));
 }
+
+#[test]
+fn accepts_the_documented_internal_component_example() {
+    let workspace = Workspace::new();
+    let (_, report) = workspace.check_document(
+        block_after("### MDS019 Internal component scope", "```md"),
+        block_after("save this as `mdspec.toml`:", "```toml"),
+        true,
+    );
+    assert_that!(report["diagnostics"].clone()).is_equal_to(serde_json::json!([]));
+}
+
+#[test]
+fn rejects_the_documented_foreign_internal_component_example() {
+    let workspace = Workspace::new();
+    let (_, report) = workspace.check_document(
+        block_after("[load]: #load-items\n```\n\nIncorrect:", "```md"),
+        block_after("save this as `mdspec.toml`:", "```toml"),
+        true,
+    );
+    assert_that!(common::rules_with_lines(&report)).is_equal_to(vec![common::rule("MDS019", 23)]);
+}
