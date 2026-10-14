@@ -3,7 +3,7 @@
 mod common;
 
 use asserting::prelude::*;
-use common::{Workspace, rule_count};
+use common::{Workspace, rule, rule_count};
 
 #[test]
 fn accepts_complete_document_with_unicode_and_code_blocks() {
@@ -220,4 +220,29 @@ fn rejects_duplicate_sections_with_default_ordering() {
     let workspace = Workspace::new();
     let (_, report) = workspace.check_document(&document, "", false);
     assert_that!(rule_count(&report, "MDS004")).is_equal_to(1);
+}
+
+#[test]
+fn rejects_unknown_endpoint_sections_when_configured() {
+    let document = format!(
+        "{}\n### Примечания\nДополнение.\n\n## Общие правила\n\n### Заметки\n\nТекст.\n",
+        include_str!("fixtures/minimal.md")
+    );
+    let workspace = Workspace::new();
+    assert_that!(workspace.check_rules(
+        &document,
+        "[document]\nallow_unknown_sections = false\n",
+        true
+    ))
+    .is_equal_to(vec![rule("MDS006", 9)]);
+}
+
+#[test]
+fn rejects_a_structural_heading_inside_a_blockquote() {
+    let document = format!(
+        "{}\n> ### Примечания\n",
+        include_str!("fixtures/minimal.md")
+    );
+    let workspace = Workspace::new();
+    assert_that!(workspace.check_rules(&document, "", true)).is_equal_to(vec![rule("MDS005", 9)]);
 }

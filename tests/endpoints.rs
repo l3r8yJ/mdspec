@@ -117,3 +117,11 @@ fn does_not_check_sections_under_a_preamble_heading() {
     let workspace = Workspace::new();
     assert_that!(workspace.check_rules(&document, "", true)).is_empty();
 }
+
+#[test]
+fn leaves_sections_and_items_after_a_late_title_out_of_the_endpoint() {
+    let document = "## Эндпоинт: А\n\nPath: `GET /a`\n\n### Компоненты\n\n#### А\n\n##### Описание\n\nТекст.\n\n# Приложение\n\n#### Б\n\n### Логика работы\n\nТекст.\n";
+    let workspace = Workspace::new();
+    assert_that!(workspace.check_rules(document, "", true))
+        .is_equal_to(vec![rule("MDS003", 1), rule("MDS005", 13)]);
+}

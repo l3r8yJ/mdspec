@@ -328,3 +328,22 @@ fn does_not_count_an_image_as_a_general_component_reference() {
     let document = format!("{plain}{GENERAL}");
     assert_that!(workspace.check_rules(&document, "", true)).is_equal_to(vec![rule("MDS018", 11)]);
 }
+
+#[test]
+fn keeps_an_internal_component_after_a_late_title_scoped_to_its_endpoint() {
+    let workspace = Workspace::new();
+    let owner = OWNER.replace("### Компоненты", "# Приложение\n\n### Компоненты");
+    let document = format!("{owner}{BORROWER}{LOAD}");
+    assert_that!(workspace.check_rules(&document, "", true))
+        .is_equal_to(vec![rule("MDS005", 9), rule("MDS019", 25)]);
+}
+
+#[test]
+fn does_not_declare_general_components_after_a_late_title() {
+    let workspace = Workspace::new();
+    let document = format!(
+        "{PLAIN}## Компоненты\n\n### А\n\n#### Описание\n\nТ.\n\n# Приложение\n\n### Б\n\nТ.\n"
+    );
+    assert_that!(workspace.check_rules(&document, "", true))
+        .is_equal_to(vec![rule("MDS018", 11), rule("MDS005", 17)]);
+}
