@@ -25,11 +25,13 @@ struct Component<'a> {
     scope: Scope,
 }
 
-struct Usage {
+struct Usage<'a> {
+    path: &'a Path,
     source: PathBuf,
     file: PathBuf,
     anchor: String,
     position: Position,
+    scope: Option<Scope>,
 }
 
 pub fn validate(documents: &[(PathBuf, Document)], config: &Config) -> Vec<Diagnostic> {
@@ -42,12 +44,17 @@ pub fn validate(documents: &[(PathBuf, Document)], config: &Config) -> Vec<Diagn
         .collect();
     let usages: Vec<_> = documents
         .iter()
-        .flat_map(|(path, document)| used(path, document))
+        .flat_map(|(path, document)| used(path, document, config))
         .collect();
     components
         .iter()
         .filter(|component| component.scope == Scope::General)
         .filter_map(|component| unreferenced(component, &usages))
+        .chain(
+            usages
+                .iter()
+                .filter_map(|usage| misplaced(usage, &components, config)),
+        )
         .collect()
 }
 
@@ -130,18 +137,21 @@ fn declared<'a>(path: &'a Path, document: &'a Document, config: &Config) -> Vec<
     components
 }
 
-fn used(path: &Path, document: &Document) -> Vec<Usage> {
+fn used<'a>(path: &'a Path, document: &Document, config: &Config) -> Vec<Usage<'a>> {
     let source = canonical(path);
+    let regions = regions(document, config);
     document
         .links
         .iter()
         .filter_map(|link| {
             let (file, anchor) = local_target(link.url.as_deref()?, path)?;
             Some(Usage {
+                path,
                 source: source.clone(),
                 file,
                 anchor,
                 position: link.position,
+                scope: scope_at(&regions, link.position.offset),
             })
         })
         .collect()
@@ -190,5 +200,28 @@ fn unreferenced(component: &Component, usages: &[Usage]) -> Option<Diagnostic> {
                 component.name
             ),
         )
+    })
+}
+
+fn misplaced(usage: &Usage, components: &[Component], config: &Config) -> Option<Diagnostic> {
+    let component = components
+        .iter()
+        .find(|component| targets(usage, component))?;
+    let inside = usage.source == component.file && usage.scope == Some(component.scope);
+    (component.scope != Scope::General && !inside).then(|| {
+        let mut diagnostic = Diagnostic::error(
+            Rule::Mds019,
+            usage.path,
+            Some(usage.position),
+            format!(
+                "Internal component {} is referenced outside its endpoint",
+                component.name
+            ),
+        );
+        diagnostic.help = Some(format!(
+            "Move {} to the H2 {} section or remove the link",
+            component.name, config.labels.components
+        ));
+        diagnostic
     })
 }

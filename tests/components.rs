@@ -144,3 +144,84 @@ fn reports_a_shared_component_whose_only_reference_is_excluded_from_the_run() {
     let (_, report) = workspace.check(&["components.md"]);
     assert_that!(common::rules_with_lines(&report)).is_equal_to(vec![rule("MDS018", 5)]);
 }
+
+const OWNER: &str = "## Эндпоинт: А\n\nPath: `GET /a`\n\n### Логика работы\n\nТекст.\n\n### Компоненты\n\n#### Загрузка\n\n##### Описание\n\nЗагрузить данные.\n\n";
+const BORROWER: &str =
+    "## Эндпоинт: Б\n\nPath: `GET /b`\n\n### Логика работы\n\n[Загрузить][load].\n\n";
+const LOAD: &str = "## Ссылки\n\n[load]: #загрузка\n";
+
+#[test]
+fn accepts_an_internal_component_referenced_from_its_own_endpoint() {
+    let workspace = Workspace::new();
+    let owner = OWNER.replace("Текст.", "[Загрузить][load].");
+    let document = format!("{owner}{LOAD}");
+    assert_that!(workspace.check_rules(&document, "", true)).is_empty();
+}
+
+#[test]
+fn reports_an_internal_component_referenced_from_another_endpoint_and_suggests_the_fix() {
+    let workspace = Workspace::new();
+    let (_, report) = workspace.check_document(&format!("{OWNER}{BORROWER}{LOAD}"), "", true);
+    assert_that!(common::rules_with_lines(&report)).is_equal_to(vec![rule("MDS019", 23)]);
+    assert_that!(
+        report["diagnostics"][0]["help"]
+            .as_str()
+            .unwrap_or_default()
+    )
+    .contains("Компоненты");
+}
+
+#[test]
+fn reports_an_internal_component_referenced_from_a_general_component() {
+    let workspace = Workspace::new();
+    let general =
+        "## Компоненты\n\n### Проверка прав\n\n#### Описание\n\nПеред [загрузкой][load].\n\n";
+    let owner = OWNER.replace("Текст.", "[Проверить][check].");
+    let document =
+        format!("{owner}{general}## Ссылки\n\n[load]: #загрузка\n[check]: #проверка-прав\n");
+    assert_that!(workspace.check_rules(&document, "", true)).is_equal_to(vec![rule("MDS019", 23)]);
+}
+
+#[test]
+fn reports_an_internal_component_referenced_from_another_file() {
+    let workspace = Workspace::new();
+    workspace.write("a.md", OWNER).write(
+        "b.md",
+        format!("{BORROWER}## Ссылки\n\n[load]: a.md#загрузка\n"),
+    );
+    let (_, report) = workspace.check(&["."]);
+    let located: Vec<_> = common::diagnostics(&report)
+        .iter()
+        .map(|diagnostic| {
+            (
+                diagnostic["rule"].as_str(),
+                diagnostic["file"]
+                    .as_str()
+                    .map(|file| file.ends_with("b.md")),
+                diagnostic["line"].as_u64(),
+            )
+        })
+        .collect();
+    assert_that!(located).is_equal_to(vec![(Some("MDS019"), Some(true), Some(7))]);
+}
+
+#[test]
+fn tells_apart_internal_components_that_share_a_name_across_endpoints() {
+    let workspace = Workspace::new();
+    let second = format!(
+        "{BORROWER}### Компоненты\n\n#### Загрузка\n\n##### Описание\n\nСвоя загрузка.\n\n"
+    );
+    let own = format!("{OWNER}{second}## Ссылки\n\n[load]: #загрузка-1\n");
+    let foreign = format!("{OWNER}{second}{LOAD}");
+    assert_that!(workspace.check_rules(&own, "", true)).is_empty();
+    assert_that!(workspace.check_rules(&foreign, "", true)).is_equal_to(vec![rule("MDS019", 23)]);
+}
+
+#[test]
+fn prints_the_suggested_fix_in_text_output() {
+    let workspace = Workspace::new();
+    workspace.write("endpoint.md", format!("{OWNER}{BORROWER}{LOAD}"));
+    let output = workspace.output(&["check", "endpoint.md"]);
+    assert_that!(String::from_utf8_lossy(&output.stderr).into_owned())
+        .contains("help: Move Загрузка to the H2 Компоненты section or remove the link");
+}
