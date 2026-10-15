@@ -3,6 +3,14 @@ use crate::diagnostics::{Diagnostic, Severity};
 use serde::Serialize;
 use std::io::{self, Write};
 
+const SCHEMA_VERSION: u8 = 1;
+
+pub mod exit {
+    pub const CLEAN: u8 = 0;
+    pub const VIOLATIONS: u8 = 1;
+    pub const OPERATIONAL_ERROR: u8 = 2;
+}
+
 #[derive(Serialize)]
 pub struct Report {
     pub schema_version: u8,
@@ -31,7 +39,7 @@ impl Report {
                 ))
         });
         Self {
-            schema_version: 1,
+            schema_version: SCHEMA_VERSION,
             files_checked,
             error_count: diagnostics
                 .iter()
@@ -50,9 +58,11 @@ impl Report {
             .iter()
             .any(|item| item.rule.is_operational())
         {
-            2
+            exit::OPERATIONAL_ERROR
+        } else if self.error_count > 0 {
+            exit::VIOLATIONS
         } else {
-            u8::from(self.error_count > 0)
+            exit::CLEAN
         }
     }
 }

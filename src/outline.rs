@@ -111,6 +111,20 @@ impl<'a> Outline<'a> {
     }
 }
 
+pub mod level {
+    pub const TITLE: u8 = 1;
+    pub const PART: u8 = 2;
+    pub const SECTION: u8 = 3;
+    pub const SECTION_ITEM: u8 = 4;
+    pub const SECTION_ITEM_DESCRIPTION: u8 = below(SECTION_ITEM);
+    pub const GENERAL_ITEM: u8 = SECTION;
+    pub const GENERAL_ITEM_DESCRIPTION: u8 = below(GENERAL_ITEM);
+
+    pub const fn below(level: u8) -> u8 {
+        level + 1
+    }
+}
+
 const TO_END_OF_DOCUMENT: u8 = 0;
 
 pub fn children(blocks: &[Block], index: usize, depth: u8) -> &[Block] {
@@ -165,8 +179,8 @@ impl<'a> Builder<'a, '_> {
     fn place(&mut self, index: usize, heading: &'a Block, level: u8) {
         self.record_references_section(index, heading, level);
         let fits = match level {
-            1 => self.accept_title(),
-            2 => {
+            level::TITLE => self.accept_title(),
+            level::PART => {
                 self.open_part(index, heading);
                 true
             }
@@ -188,8 +202,8 @@ impl<'a> Builder<'a, '_> {
             return;
         }
         let ends_before_level = match level {
-            2 => TO_END_OF_DOCUMENT,
-            3 => 2,
+            level::PART => TO_END_OF_DOCUMENT,
+            level::SECTION => level::PART,
             _ => return,
         };
         self.outline
@@ -218,7 +232,7 @@ impl<'a> Builder<'a, '_> {
                     Part::Endpoint(Endpoint {
                         heading,
                         name: name.trim(),
-                        intro: children(self.blocks, index, 3),
+                        intro: children(self.blocks, index, level::SECTION),
                         sections: Vec::new(),
                         detached: Vec::new(),
                     })
@@ -233,13 +247,13 @@ impl<'a> Builder<'a, '_> {
     fn accept_general_heading(&mut self, index: usize, heading: &'a Block, level: u8) -> bool {
         let name = heading.text.trim();
         match level {
-            3 => {
+            level::GENERAL_ITEM => {
                 if name != self.labels.references {
                     self.attach_general_item(index, heading);
                 }
                 !name.is_empty()
             }
-            4 => name == self.labels.description,
+            level::GENERAL_ITEM_DESCRIPTION => name == self.labels.description,
             _ => false,
         }
     }
@@ -251,7 +265,7 @@ impl<'a> Builder<'a, '_> {
         if let Some(Part::General(general)) = self.outline.parts.last_mut() {
             general.items.push(Item {
                 heading,
-                body: children(self.blocks, index, 3),
+                body: children(self.blocks, index, level::GENERAL_ITEM),
             });
         }
     }
@@ -259,16 +273,16 @@ impl<'a> Builder<'a, '_> {
     fn accept_endpoint_heading(&mut self, index: usize, heading: &'a Block, level: u8) -> bool {
         let name = heading.text.trim();
         match level {
-            3 => {
+            level::SECTION => {
                 self.open_section(index, heading);
                 true
             }
-            4 => {
+            level::SECTION_ITEM => {
                 self.attach_section_item(index, heading);
                 self.in_component = self.current_section == Some(SectionKind::Components);
                 self.current_section.is_some_and(SectionKind::has_items) && !name.is_empty()
             }
-            5 => self.in_component && name == self.labels.description,
+            level::SECTION_ITEM_DESCRIPTION => self.in_component && name == self.labels.description,
             _ => false,
         }
     }
@@ -280,7 +294,7 @@ impl<'a> Builder<'a, '_> {
         let section = Section {
             heading,
             kind,
-            body: children(self.blocks, index, 3),
+            body: children(self.blocks, index, level::SECTION),
             items: Vec::new(),
         };
         match self.outline.parts.last_mut() {
@@ -311,7 +325,7 @@ impl<'a> Builder<'a, '_> {
         {
             section.items.push(Item {
                 heading,
-                body: children(self.blocks, index, 4),
+                body: children(self.blocks, index, level::SECTION_ITEM),
             });
         }
     }

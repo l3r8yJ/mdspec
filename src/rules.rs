@@ -1,7 +1,7 @@
 use crate::config::{Config, Labels};
 use crate::diagnostics::Diagnostic;
 use crate::model::{Block, BlockKind, Position};
-use crate::outline::{Endpoint, General, Item, Outline, Section, SectionKind, children};
+use crate::outline::{Endpoint, General, Item, Outline, Section, SectionKind, children, level};
 use crate::rule::Rule;
 use std::collections::HashSet;
 use std::path::Path;
@@ -28,7 +28,12 @@ fn validate_details(
     for section in sections {
         match section.kind {
             SectionKind::Components => {
-                diagnostics.extend(validate_components(&section.items, 4, path, labels));
+                diagnostics.extend(validate_components(
+                    &section.items,
+                    level::SECTION_ITEM,
+                    path,
+                    labels,
+                ));
             }
             SectionKind::Mappings => validate_mappings(section.body, path, labels, diagnostics),
             SectionKind::Examples => validate_examples(section.body, path, labels, diagnostics),
@@ -38,7 +43,7 @@ fn validate_details(
 }
 
 fn validate_general_components(general: &General, path: &Path, labels: &Labels) -> Vec<Diagnostic> {
-    let mut diagnostics = validate_components(&general.items, 3, path, labels);
+    let mut diagnostics = validate_components(&general.items, level::GENERAL_ITEM, path, labels);
     if general.items.is_empty() {
         diagnostics.push(issue(
             Rule::Mds007,
@@ -159,7 +164,7 @@ fn validate_components(items: &[Item], level: u8, path: &Path, labels: &Labels) 
             .iter()
             .enumerate()
             .filter(|(_, child)| {
-                matches!(child.kind, BlockKind::Heading { level: depth, .. } if depth == level + 1)
+                matches!(child.kind, BlockKind::Heading { level: depth, .. } if depth == level::below(level))
                     && child.text.trim() == labels.description
             })
             .collect();
@@ -171,14 +176,14 @@ fn validate_components(items: &[Item], level: u8, path: &Path, labels: &Labels) 
                 format!(
                     "Component {} is missing H{} {}",
                     block.text,
-                    level + 1,
+                    level::below(level),
                     labels.description
                 ),
             ));
         }
         for (number, (description_index, description)) in descriptions.iter().enumerate() {
             if number > 0
-                || !children(item.body, *description_index, level + 1)
+                || !children(item.body, *description_index, level::below(level))
                     .iter()
                     .any(has_content)
             {
@@ -265,12 +270,18 @@ fn validate_examples(
 ) {
     let mut names = HashSet::new();
     for (index, block) in blocks.iter().enumerate() {
-        if !matches!(block.kind, BlockKind::Heading { level: 4, .. }) {
+        if !matches!(
+            block.kind,
+            BlockKind::Heading {
+                level: level::SECTION_ITEM,
+                ..
+            }
+        ) {
             continue;
         }
         let name = block.text.trim();
         let known = name == labels.request || name == labels.response;
-        let has_code = children(blocks, index, 4)
+        let has_code = children(blocks, index, level::SECTION_ITEM)
             .iter()
             .any(|child| matches!(child.kind, BlockKind::Code) && !child.text.trim().is_empty());
         let message = if !known {
@@ -289,6 +300,8 @@ fn validate_examples(
     }
 }
 
+const HEADER_AND_ONE_ROW: usize = 2;
+
 fn validate_mappings(
     blocks: &[Block],
     path: &Path,
@@ -297,9 +310,15 @@ fn validate_mappings(
 ) {
     let mut inside_mapping = false;
     for (index, block) in blocks.iter().enumerate() {
-        if matches!(block.kind, BlockKind::Heading { level: 4, .. }) {
+        if matches!(
+            block.kind,
+            BlockKind::Heading {
+                level: level::SECTION_ITEM,
+                ..
+            }
+        ) {
             inside_mapping = true;
-            let contents = children(blocks, index, 4);
+            let contents = children(blocks, index, level::SECTION_ITEM);
             let tables: Vec<_> = contents
                 .iter()
                 .take_while(|child| !matches!(child.kind, BlockKind::Heading { .. }))
@@ -349,7 +368,7 @@ fn validate_table(block: &Block, path: &Path, labels: &Labels, diagnostics: &mut
         ));
         return;
     };
-    if rows.len() < 2
+    if rows.len() < HEADER_AND_ONE_ROW
         || rows.iter().skip(1).any(|row| {
             [source, target]
                 .iter()
