@@ -3,11 +3,13 @@ mod components;
 mod config;
 mod diagnostics;
 mod model;
+mod outline;
 mod parser;
 mod references;
 mod reporter;
 mod rule;
 mod rules;
+mod structure;
 mod workspace;
 
 use clap::Parser;
@@ -57,12 +59,7 @@ fn check(
     let mut documents = Vec::new();
     for file in files {
         match fs::read_to_string(&file) {
-            Ok(source) => {
-                let document = parser::parse(&source);
-                diagnostics.extend(rules::validate(&document, &file, &config));
-                diagnostics.extend(references::validate(&document, &file, &config));
-                documents.push((file, document));
-            }
+            Ok(source) => documents.push((file, parser::parse(&source))),
             Err(error) => diagnostics.push(Diagnostic::error(
                 Rule::Mds901,
                 &file,
@@ -71,7 +68,22 @@ fn check(
             )),
         }
     }
-    diagnostics.extend(components::validate(&documents, &config));
+    let outlines: Vec<_> = documents
+        .iter()
+        .map(|(file, document)| {
+            (
+                file.as_path(),
+                document,
+                outline::build(document, &config.labels),
+            )
+        })
+        .collect();
+    for (file, document, outline) in &outlines {
+        diagnostics.extend(structure::validate(outline, file, &config));
+        diagnostics.extend(rules::validate(outline, file, &config));
+        diagnostics.extend(references::validate(document, outline, file, &config));
+    }
+    diagnostics.extend(components::validate(&outlines, &config));
     if strict || config.diagnostics.warnings_as_errors {
         for diagnostic in &mut diagnostics {
             diagnostic.severity = Severity::Error;

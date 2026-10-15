@@ -6,9 +6,9 @@ use std::path::{Path, PathBuf};
 use crate::config::Config;
 use crate::diagnostics::Diagnostic;
 use crate::model::{BlockKind, Document, LinkKind, Position};
+use crate::outline::{Item, Outline, Part, SectionKind};
 use crate::references::{is_local, percent_decode};
 use crate::rule::Rule;
-use crate::rules::{children, endpoint_name, is_general_components, is_general_references};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Scope {
@@ -37,14 +37,14 @@ struct Usage<'a> {
     scope: Option<Scope>,
 }
 
-pub fn validate(documents: &[(PathBuf, Document)], config: &Config) -> Vec<Diagnostic> {
+pub fn validate(documents: &[(&Path, &Document, Outline)], config: &Config) -> Vec<Diagnostic> {
     let components: Vec<_> = documents
         .iter()
-        .flat_map(|(path, document)| declared(path, document, config))
+        .flat_map(|(path, _, outline)| declared(path, outline))
         .collect();
     let usages: Vec<_> = documents
         .iter()
-        .flat_map(|(path, document)| used(path, document, config))
+        .flat_map(|(path, document, outline)| used(path, document, outline))
         .collect();
     let mut index: HashMap<Key, &Component> = HashMap::new();
     for component in &components {
@@ -65,86 +65,63 @@ pub fn validate(documents: &[(PathBuf, Document)], config: &Config) -> Vec<Diagn
         .collect()
 }
 
-fn regions(document: &Document, config: &Config) -> Vec<(Range<usize>, Option<Scope>)> {
-    let headings: Vec<_> = document
-        .blocks
-        .iter()
-        .filter(|block| matches!(block.kind, BlockKind::Heading { level: 2, .. }))
-        .collect();
-    headings
+fn scope_at(outline: &Outline, offset: usize) -> Option<Scope> {
+    match outline.part_at(offset)? {
+        (index, Part::Endpoint(_)) => Some(Scope::Endpoint(index)),
+        (_, Part::General(_)) => Some(Scope::General),
+        (_, Part::Other(_)) => None,
+    }
+}
+
+fn declared<'a>(path: &'a Path, outline: &'a Outline) -> Vec<Component<'a>> {
+    let file = canonical(path);
+    outline
+        .parts
         .iter()
         .enumerate()
-        .map(|(number, heading)| {
-            let end = headings
-                .get(number + 1)
-                .map_or(usize::MAX, |next| next.span.start.offset);
-            let scope = if is_general_components(heading, &config.labels) {
-                Some(Scope::General)
-            } else {
-                endpoint_name(heading, &config.labels)
-                    .map(|_| Scope::Endpoint(heading.span.start.offset))
+        .flat_map(|(index, part)| scoped_items(index, part))
+        .filter_map(|(scope, item)| {
+            let BlockKind::Heading { anchor, .. } = &item.heading.kind else {
+                return None;
             };
-            (heading.span.start.offset..end, scope)
+            let end = item
+                .body
+                .last()
+                .map_or(item.heading.span.end.offset, |last| last.span.end.offset);
+            Some(Component {
+                path,
+                file: file.clone(),
+                anchor: anchor.clone(),
+                name: item.heading.text.trim(),
+                position: item.heading.span.start,
+                extent: item.heading.span.start.offset..end,
+                scope,
+            })
         })
         .collect()
 }
 
-fn scope_at(regions: &[(Range<usize>, Option<Scope>)], offset: usize) -> Option<Scope> {
-    regions
-        .iter()
-        .find(|(range, _)| range.contains(&offset))
-        .and_then(|(_, scope)| *scope)
-}
-
-fn declared<'a>(path: &'a Path, document: &'a Document, config: &Config) -> Vec<Component<'a>> {
-    let file = canonical(path);
-    let regions = regions(document, config);
-    let mut components = Vec::new();
-    for (index, block) in document.blocks.iter().enumerate() {
-        let (level, scope) = match block.kind {
-            BlockKind::Heading { level: 2, .. } if is_general_components(block, &config.labels) => {
-                (3, Scope::General)
-            }
-            BlockKind::Heading { level: 3, .. }
-                if block.text.trim() == config.labels.components =>
-            {
-                match scope_at(&regions, block.span.start.offset) {
-                    Some(Scope::Endpoint(endpoint)) => (4, Scope::Endpoint(endpoint)),
-                    _ => continue,
-                }
-            }
-            _ => continue,
-        };
-        let section = children(&document.blocks, index, level - 1);
-        for (offset, heading) in section.iter().enumerate() {
-            if !matches!(heading.kind, BlockKind::Heading { level: depth, .. } if depth == level)
-                || is_general_references(heading, level, &config.labels)
-            {
-                continue;
-            }
-            let BlockKind::Heading { anchor, .. } = &heading.kind else {
-                continue;
-            };
-            let end = children(section, offset, level)
-                .last()
-                .map_or(heading.span.end.offset, |last| last.span.end.offset);
-            components.push(Component {
-                path,
-                file: file.clone(),
-                anchor: anchor.clone(),
-                name: heading.text.trim(),
-                position: heading.span.start,
-                extent: heading.span.start.offset..end,
-                scope,
-            });
-        }
+fn scoped_items<'o, 'a>(index: usize, part: &'o Part<'a>) -> Vec<(Scope, &'o Item<'a>)> {
+    match part {
+        Part::Endpoint(endpoint) => endpoint
+            .sections
+            .iter()
+            .chain(&endpoint.detached)
+            .filter(|section| section.kind == SectionKind::Components)
+            .flat_map(|section| &section.items)
+            .map(|item| (Scope::Endpoint(index), item))
+            .collect(),
+        Part::General(general) => general
+            .items
+            .iter()
+            .map(|item| (Scope::General, item))
+            .collect(),
+        Part::Other(_) => Vec::new(),
     }
-    components
 }
 
-fn used<'a>(path: &'a Path, document: &Document, config: &Config) -> Vec<Usage<'a>> {
+fn used<'a>(path: &'a Path, document: &Document, outline: &Outline) -> Vec<Usage<'a>> {
     let source = canonical(path);
-    let regions = regions(document, config);
     document
         .links
         .iter()
@@ -157,7 +134,7 @@ fn used<'a>(path: &'a Path, document: &Document, config: &Config) -> Vec<Usage<'
                 file,
                 anchor,
                 position: link.position,
-                scope: scope_at(&regions, link.position.offset),
+                scope: scope_at(outline, link.position.offset),
             })
         })
         .collect()

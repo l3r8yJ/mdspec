@@ -1,173 +1,61 @@
 use crate::config::{Config, Labels};
 use crate::diagnostics::Diagnostic;
-use crate::model::{Block, BlockKind, Document, Position};
+use crate::model::{Block, BlockKind, Position};
+use crate::outline::{Endpoint, General, Item, Outline, Section, SectionKind, children};
 use crate::rule::Rule;
 use std::collections::HashSet;
 use std::path::Path;
 
-pub fn validate(document: &Document, path: &Path, config: &Config) -> Vec<Diagnostic> {
+pub fn validate(outline: &Outline, path: &Path, config: &Config) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
-    validate_endpoints(&document.blocks, path, config, &mut diagnostics);
-    validate_general_components(&document.blocks, path, config, &mut diagnostics);
-    validate_nesting(document, path, config, &mut diagnostics);
+    for endpoint in outline.endpoints() {
+        diagnostics.extend(validate_path(endpoint, path, config));
+        diagnostics.extend(validate_sections(endpoint, path, config));
+        validate_details(&endpoint.sections, path, &config.labels, &mut diagnostics);
+    }
+    for general in outline.general() {
+        diagnostics.extend(validate_general_components(general, path, &config.labels));
+    }
     diagnostics
 }
 
 fn validate_details(
-    blocks: &[Block],
+    sections: &[Section],
     path: &Path,
     labels: &Labels,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    for (index, block) in blocks.iter().enumerate() {
-        if !matches!(block.kind, BlockKind::Heading { level: 3, .. }) {
-            continue;
-        }
-        let children = children(blocks, index, 3);
-        if block.text.trim() == labels.components {
-            diagnostics.extend(validate_components(children, 4, path, labels));
-        } else if block.text.trim() == labels.mappings {
-            validate_mappings(children, path, labels, diagnostics);
-        } else if block.text.trim() == labels.examples {
-            validate_examples(children, path, labels, diagnostics);
+    for section in sections {
+        match section.kind {
+            SectionKind::Components => {
+                diagnostics.extend(validate_components(&section.items, 4, path, labels));
+            }
+            SectionKind::Mappings => validate_mappings(section.body, path, labels, diagnostics),
+            SectionKind::Examples => validate_examples(section.body, path, labels, diagnostics),
+            SectionKind::Logic | SectionKind::References | SectionKind::Unknown => {}
         }
     }
 }
 
-pub fn children(blocks: &[Block], index: usize, depth: u8) -> &[Block] {
-    let rest = blocks.get(index + 1..).unwrap_or_default();
-    let length = rest
-        .iter()
-        .position(|block| matches!(block.kind, BlockKind::Heading { level, .. } if level <= depth))
-        .unwrap_or(rest.len());
-    rest.get(..length).unwrap_or_default()
-}
-
-fn issue(rule: Rule, path: &Path, block: &Block, message: impl Into<String>) -> Diagnostic {
-    Diagnostic::error(rule, path, Some(block.span.start), message)
-}
-
-fn validate_endpoints(
-    blocks: &[Block],
-    path: &Path,
-    config: &Config,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
-    let endpoints: Vec<_> = blocks
-        .iter()
-        .enumerate()
-        .filter_map(|(index, heading)| {
-            let name = endpoint_name(heading, &config.labels)?;
-            let endpoint = blocks.get(index..=index + children(blocks, index, 2).len())?;
-            Some((heading, name, endpoint))
-        })
-        .collect();
-    if endpoints.is_empty()
-        && config.document.require_endpoint
-        && !blocks
-            .iter()
-            .any(|block| is_general_components(block, &config.labels))
-    {
-        diagnostics.push(Diagnostic::error(
-            Rule::Mds001,
+fn validate_general_components(general: &General, path: &Path, labels: &Labels) -> Vec<Diagnostic> {
+    let mut diagnostics = validate_components(&general.items, 3, path, labels);
+    if general.items.is_empty() {
+        diagnostics.push(issue(
+            Rule::Mds007,
             path,
-            None,
-            format!("Missing H2 heading: {} name", config.labels.endpoint_prefix),
+            general.heading,
+            format!("Empty section: {}", labels.components),
         ));
     }
-    for (heading, name, endpoint) in endpoints {
-        if name.is_empty() {
-            diagnostics.push(issue(
-                Rule::Mds001,
-                path,
-                heading,
-                format!(
-                    "Expected H2 heading: {} name",
-                    config.labels.endpoint_prefix
-                ),
-            ));
-        }
-        diagnostics.extend(validate_path(endpoint, path, config));
-        diagnostics.extend(validate_sections(
-            endpoint,
-            heading.span.start,
-            path,
-            config,
-        ));
-        validate_details(endpoint, path, &config.labels, diagnostics);
-    }
+    diagnostics
 }
 
-pub fn is_general_components(block: &Block, labels: &Labels) -> bool {
-    matches!(block.kind, BlockKind::Heading { level: 2, .. })
-        && block.text.trim() == labels.components
-}
-
-pub fn is_general_references(block: &Block, level: u8, labels: &Labels) -> bool {
-    level == 3
-        && matches!(block.kind, BlockKind::Heading { level: 3, .. })
-        && block.text.trim() == labels.references
-}
-
-fn validate_general_components(
-    blocks: &[Block],
-    path: &Path,
-    config: &Config,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
-    let sections = blocks
-        .iter()
-        .enumerate()
-        .filter(|(_, block)| is_general_components(block, &config.labels));
-    for (number, (index, block)) in sections.enumerate() {
-        let endpoint_follows = blocks.get(index..).is_some_and(|rest| {
-            rest.iter()
-                .any(|block| endpoint_name(block, &config.labels).is_some())
-        });
-        if number > 0 || endpoint_follows {
-            diagnostics.push(issue(
-                Rule::Mds004,
-                path,
-                block,
-                format!(
-                    "The H2 {} section must appear once, after every endpoint",
-                    config.labels.components
-                ),
-            ));
-        }
-        let contents = children(blocks, index, 2);
-        if !contents.iter().any(|child| {
-            matches!(child.kind, BlockKind::Heading { level: 3, .. })
-                && !is_general_references(child, 3, &config.labels)
-        }) {
-            diagnostics.push(issue(
-                Rule::Mds007,
-                path,
-                block,
-                format!("Empty section: {}", config.labels.components),
-            ));
-        }
-        diagnostics.extend(validate_components(contents, 3, path, &config.labels));
-    }
-}
-
-pub fn endpoint_name<'a>(block: &'a Block, labels: &Labels) -> Option<&'a str> {
-    if !matches!(block.kind, BlockKind::Heading { level: 2, .. }) {
-        return None;
-    }
-    block
-        .text
-        .trim()
-        .strip_prefix(labels.endpoint_prefix.as_str())
-        .map(str::trim)
-}
-
-fn validate_path(blocks: &[Block], path: &Path, config: &Config) -> Vec<Diagnostic> {
+fn validate_path(endpoint: &Endpoint, path: &Path, config: &Config) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
-    let paths: Vec<_> = blocks
+    let paths: Vec<_> = endpoint
+        .intro
         .iter()
         .enumerate()
-        .take_while(|(_, block)| !matches!(block.kind, BlockKind::Heading { level: 3, .. }))
         .filter(|(_, block)| {
             matches!(block.kind, BlockKind::Paragraph)
                 && block
@@ -177,15 +65,15 @@ fn validate_path(blocks: &[Block], path: &Path, config: &Config) -> Vec<Diagnost
         })
         .collect();
     if paths.is_empty() {
-        diagnostics.push(Diagnostic::error(
+        diagnostics.push(issue(
             Rule::Mds002,
             path,
-            blocks.first().map(|block| block.span.start),
+            endpoint.heading,
             format!("Missing {} METHOD /path", config.labels.path_prefix),
         ));
     }
     for (index, block) in paths {
-        let immediately_after_endpoint = index == 1;
+        let immediately_after_endpoint = index == 0;
         if !immediately_after_endpoint || !valid_path(&block.text, &config.labels) {
             diagnostics.push(issue(
                 Rule::Mds002,
@@ -201,6 +89,118 @@ fn validate_path(blocks: &[Block], path: &Path, config: &Config) -> Vec<Diagnost
     diagnostics
 }
 
+fn validate_sections(endpoint: &Endpoint, path: &Path, config: &Config) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    let mut seen = HashSet::new();
+    let mut next_rank = 0;
+    for section in &endpoint.sections {
+        let Some(rank) = section.kind.rank() else {
+            continue;
+        };
+        let name = section.heading.text.trim();
+        let unique = seen.insert(name);
+        let invalid_order = if config.document.enforce_section_order {
+            rank < next_rank
+        } else {
+            !unique
+        };
+        if invalid_order {
+            diagnostics.push(issue(
+                Rule::Mds004,
+                path,
+                section.heading,
+                format!(
+                    "Sections must be unique and ordered: {}",
+                    config.labels.sections().join(", ")
+                ),
+            ));
+        }
+        next_rank = next_rank.max(rank + 1);
+        let populated = match section.kind {
+            SectionKind::Logic => section.body.iter().any(has_content),
+            SectionKind::Components | SectionKind::Mappings | SectionKind::Examples => {
+                !section.items.is_empty()
+            }
+            SectionKind::References | SectionKind::Unknown => true,
+        };
+        if !populated {
+            diagnostics.push(issue(
+                Rule::Mds007,
+                path,
+                section.heading,
+                format!("Empty section: {name}"),
+            ));
+        }
+    }
+    diagnostics.extend(validate_required_sections(
+        &seen,
+        endpoint.heading.span.start,
+        path,
+        config,
+    ));
+    diagnostics
+}
+
+fn validate_components(items: &[Item], level: u8, path: &Path, labels: &Labels) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    let mut names = HashSet::new();
+    for item in items {
+        let block = item.heading;
+        if !names.insert(block.text.trim()) {
+            diagnostics.push(issue(
+                Rule::Mds009,
+                path,
+                block,
+                format!("Duplicate component name: {}", block.text),
+            ));
+        }
+        let descriptions: Vec<_> = item
+            .body
+            .iter()
+            .enumerate()
+            .filter(|(_, child)| {
+                matches!(child.kind, BlockKind::Heading { level: depth, .. } if depth == level + 1)
+                    && child.text.trim() == labels.description
+            })
+            .collect();
+        if descriptions.is_empty() {
+            diagnostics.push(issue(
+                Rule::Mds008,
+                path,
+                block,
+                format!(
+                    "Component {} is missing H{} {}",
+                    block.text,
+                    level + 1,
+                    labels.description
+                ),
+            ));
+        }
+        for (number, (description_index, description)) in descriptions.iter().enumerate() {
+            if number > 0
+                || !children(item.body, *description_index, level + 1)
+                    .iter()
+                    .any(has_content)
+            {
+                diagnostics.push(issue(
+                    Rule::Mds008,
+                    path,
+                    description,
+                    format!(
+                        "Component {} must have one nonempty description",
+                        block.text
+                    ),
+                ));
+            }
+        }
+    }
+    diagnostics
+}
+
+fn issue(rule: Rule, path: &Path, block: &Block, message: impl Into<String>) -> Diagnostic {
+    Diagnostic::error(rule, path, Some(block.span.start), message)
+}
+
 fn valid_path(text: &str, labels: &Labels) -> bool {
     let Some(value) = text.trim().strip_prefix(labels.path_prefix.as_str()) else {
         return false;
@@ -214,75 +214,6 @@ fn valid_path(text: &str, labels: &Labels) -> bool {
     ) && path.starts_with('/')
         && parts.next().is_none()
         && !value.contains(['\n', '\r'])
-}
-
-fn validate_sections(
-    blocks: &[Block],
-    endpoint: Position,
-    path: &Path,
-    config: &Config,
-) -> Vec<Diagnostic> {
-    let mut diagnostics = Vec::new();
-    let mut seen = HashSet::new();
-    let mut next_rank = 0;
-    for (index, block) in blocks.iter().enumerate() {
-        if !matches!(block.kind, BlockKind::Heading { level: 3, .. }) {
-            continue;
-        }
-        let name = block.text.trim();
-        let Some(rank) = config
-            .labels
-            .sections()
-            .iter()
-            .position(|section| *section == name)
-        else {
-            if !config.document.allow_unknown_sections {
-                diagnostics.push(issue(
-                    Rule::Mds006,
-                    path,
-                    block,
-                    format!("Unknown section: {name}"),
-                ));
-            }
-            continue;
-        };
-        let unique = seen.insert(name);
-        let invalid_order = if config.document.enforce_section_order {
-            rank < next_rank
-        } else {
-            !unique
-        };
-        if invalid_order {
-            diagnostics.push(issue(
-                Rule::Mds004,
-                path,
-                block,
-                format!(
-                    "Sections must be unique and ordered: {}",
-                    config.labels.sections().join(", ")
-                ),
-            ));
-        }
-        next_rank = next_rank.max(rank + 1);
-        let contents = children(blocks, index, 3);
-        let populated = match rank {
-            0 => contents.iter().any(has_content),
-            1..=3 => contents
-                .iter()
-                .any(|child| matches!(child.kind, BlockKind::Heading { level: 4, .. })),
-            _ => true,
-        };
-        if !populated {
-            diagnostics.push(issue(
-                Rule::Mds007,
-                path,
-                block,
-                format!("Empty section: {name}"),
-            ));
-        }
-    }
-    diagnostics.extend(validate_required_sections(&seen, endpoint, path, config));
-    diagnostics
 }
 
 fn validate_required_sections(
@@ -324,138 +255,6 @@ fn has_content(block: &Block) -> bool {
         block.kind,
         BlockKind::Paragraph | BlockKind::Code | BlockKind::Content | BlockKind::Table(_)
     ) && !block.text.trim().is_empty()
-}
-
-fn validate_nesting(
-    document: &Document,
-    path: &Path,
-    config: &Config,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
-    let mut section = "";
-    let mut component = false;
-    let mut endpoint = !config.document.require_endpoint;
-    let mut title_allowed = true;
-    let mut unchecked = false;
-    let mut general = false;
-    for block in &document.blocks {
-        let BlockKind::Heading { level: depth, .. } = block.kind else {
-            continue;
-        };
-        let valid = match depth {
-            1 => title_allowed,
-            2 => {
-                endpoint = true;
-                title_allowed = false;
-                general = is_general_components(block, &config.labels);
-                unchecked = !general && endpoint_name(block, &config.labels).is_none();
-                section = "";
-                component = false;
-                true
-            }
-            _ if unchecked => true,
-            3 if general => !block.text.trim().is_empty(),
-            4 if general => block.text.trim() == config.labels.description,
-            3 => {
-                section = block.text.trim();
-                component = false;
-                endpoint
-            }
-            4 => {
-                component = section == config.labels.components;
-                (component
-                    || section == config.labels.mappings
-                    || section == config.labels.examples)
-                    && !block.text.trim().is_empty()
-            }
-            5 => component && block.text.trim() == config.labels.description,
-            _ => false,
-        };
-        if !valid {
-            diagnostics.push(issue(
-                Rule::Mds005,
-                path,
-                block,
-                format!(
-                    "Invalid heading nesting: H2 endpoint, H3 section, H4 component/mapping, H5 {}; H2 {}, H3 component, H4 {}",
-                    config.labels.description, config.labels.components, config.labels.description
-                ),
-            ));
-        }
-    }
-    diagnostics.extend(document.nested_headings.iter().map(|heading| {
-        Diagnostic::error(
-            Rule::Mds005,
-            path,
-            Some(heading.position),
-            "Structural headings must not occur inside lists or blockquotes",
-        )
-    }));
-}
-
-fn validate_components(
-    blocks: &[Block],
-    level: u8,
-    path: &Path,
-    labels: &Labels,
-) -> Vec<Diagnostic> {
-    let mut diagnostics = Vec::new();
-    let mut names = HashSet::new();
-    for (index, block) in blocks.iter().enumerate() {
-        if !matches!(block.kind, BlockKind::Heading { level: depth, .. } if depth == level)
-            || is_general_references(block, level, labels)
-        {
-            continue;
-        }
-        if !names.insert(block.text.trim()) {
-            diagnostics.push(issue(
-                Rule::Mds009,
-                path,
-                block,
-                format!("Duplicate component name: {}", block.text),
-            ));
-        }
-        let contents = children(blocks, index, level);
-        let descriptions: Vec<_> = contents
-            .iter()
-            .enumerate()
-            .filter(|(_, child)| {
-                matches!(child.kind, BlockKind::Heading { level: depth, .. } if depth == level + 1)
-                    && child.text.trim() == labels.description
-            })
-            .collect();
-        if descriptions.is_empty() {
-            diagnostics.push(issue(
-                Rule::Mds008,
-                path,
-                block,
-                format!(
-                    "Component {} is missing H{} {}",
-                    block.text,
-                    level + 1,
-                    labels.description
-                ),
-            ));
-        }
-        for (number, (description_index, description)) in descriptions.iter().enumerate() {
-            if number > 0
-                || !children(contents, *description_index, level + 1)
-                    .iter()
-                    .any(has_content)
-            {
-                diagnostics.push(issue(
-                    Rule::Mds008,
-                    path,
-                    description,
-                    format!(
-                        "Component {} must have one nonempty description",
-                        block.text
-                    ),
-                ));
-            }
-        }
-    }
-    diagnostics
 }
 
 fn validate_examples(

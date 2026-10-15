@@ -1,6 +1,6 @@
 # Build a typed outline of each document
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 120
 - TAGS: refactor,v0.2.0
 
