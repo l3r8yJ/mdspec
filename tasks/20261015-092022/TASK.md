@@ -1,6 +1,6 @@
 # Name the magic numbers
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 112
 - TAGS: refactor,v0.2.0
 
