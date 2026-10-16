@@ -1,5 +1,4 @@
 mod cli;
-mod components;
 mod config;
 mod diagnostics;
 mod links;

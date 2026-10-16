@@ -1,11 +1,13 @@
 use crate::config::{Config, Labels};
 use crate::diagnostics::Diagnostic;
 use crate::model::{Block, BlockKind, Document};
-use crate::outline::{General, Item, Outline, Section, SectionKind, children, level};
+use crate::outline::{Outline, Section, SectionKind, children, level};
 use crate::rule::Rule;
 use std::collections::HashSet;
 use std::path::Path;
 
+mod component_scope;
+mod components;
 mod path;
 mod sections;
 mod structure;
@@ -18,7 +20,14 @@ pub struct Source<'a> {
 
 type Check = fn(&[Source<'_>], &Config) -> Vec<Diagnostic>;
 
-const CHECKS: &[Check] = &[structure::check, sections::check, path::check, unmigrated];
+const CHECKS: &[Check] = &[
+    structure::check,
+    sections::check,
+    path::check,
+    components::check,
+    component_scope::check,
+    unmigrated,
+];
 
 pub fn check(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
     CHECKS
@@ -40,7 +49,6 @@ fn unmigrated(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
             ));
             diagnostics
         })
-        .chain(crate::components::validate(sources, config))
         .collect()
 }
 
@@ -48,9 +56,6 @@ fn endpoint_rules(outline: &Outline, path: &Path, config: &Config) -> Vec<Diagno
     let mut diagnostics = Vec::new();
     for endpoint in outline.endpoints() {
         validate_details(&endpoint.sections, path, &config.labels, &mut diagnostics);
-    }
-    for general in outline.general() {
-        diagnostics.extend(validate_general_components(general, path, &config.labels));
     }
     diagnostics
 }
@@ -63,79 +68,14 @@ fn validate_details(
 ) {
     for section in sections {
         match section.kind {
-            SectionKind::Components => {
-                diagnostics.extend(validate_components(
-                    &section.items,
-                    level::SECTION_ITEM,
-                    path,
-                    labels,
-                ));
-            }
             SectionKind::Mappings => validate_mappings(section.body, path, labels, diagnostics),
             SectionKind::Examples => validate_examples(section.body, path, labels, diagnostics),
-            SectionKind::Logic | SectionKind::References | SectionKind::Unknown => {}
+            SectionKind::Components
+            | SectionKind::Logic
+            | SectionKind::References
+            | SectionKind::Unknown => {}
         }
     }
-}
-
-fn validate_general_components(general: &General, path: &Path, labels: &Labels) -> Vec<Diagnostic> {
-    validate_components(&general.items, level::GENERAL_ITEM, path, labels)
-}
-
-fn validate_components(items: &[Item], level: u8, path: &Path, labels: &Labels) -> Vec<Diagnostic> {
-    let mut diagnostics = Vec::new();
-    let mut names = HashSet::new();
-    for item in items {
-        let block = item.heading;
-        if !names.insert(block.text.trim()) {
-            diagnostics.push(issue(
-                Rule::Mds009,
-                path,
-                block,
-                format!("Duplicate component name: {}", block.text),
-            ));
-        }
-        let descriptions: Vec<_> = item
-            .body
-            .iter()
-            .enumerate()
-            .filter(|(_, child)| {
-                matches!(child.kind, BlockKind::Heading { level: depth, .. } if depth == level::below(level))
-                    && child.text.trim() == labels.description
-            })
-            .collect();
-        if descriptions.is_empty() {
-            diagnostics.push(issue(
-                Rule::Mds008,
-                path,
-                block,
-                format!(
-                    "Component {} is missing H{} {}",
-                    block.text,
-                    level::below(level),
-                    labels.description
-                ),
-            ));
-        }
-        for (number, (description_index, description)) in descriptions.iter().enumerate() {
-            if number > 0
-                || !children(item.body, *description_index, level::below(level))
-                    .iter()
-                    .any(Block::has_content)
-            {
-                diagnostics.push(issue(
-                    Rule::Mds008,
-                    path,
-                    description,
-                    format!(
-                        "Component {} must have one nonempty description",
-                        block.text
-                    ),
-                ));
-            }
-        }
-    }
-    diagnostics
 }
 
 fn issue(rule: Rule, path: &Path, block: &Block, message: impl Into<String>) -> Diagnostic {

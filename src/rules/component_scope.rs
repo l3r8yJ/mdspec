@@ -38,7 +38,7 @@ struct Usage<'a> {
     scope: Option<Scope>,
 }
 
-pub fn validate(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
+pub fn check(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
     let components: Vec<_> = sources
         .iter()
         .flat_map(|source| declared(source.path, &source.outline))
