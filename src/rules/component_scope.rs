@@ -106,7 +106,6 @@ fn scoped_items<'o, 'a>(index: usize, part: &'o Part<'a>) -> Vec<(Scope, &'o Ite
         Part::Endpoint(endpoint) => endpoint
             .sections
             .iter()
-            .chain(&endpoint.detached)
             .filter(|section| section.kind == SectionKind::Components)
             .flat_map(|section| &section.items)
             .map(|item| (Scope::Endpoint(index), item))

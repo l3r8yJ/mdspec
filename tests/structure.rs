@@ -258,7 +258,7 @@ fn rejects_a_structural_heading_inside_a_blockquote() {
 }
 
 #[test]
-fn does_not_report_an_unknown_section_after_a_late_title() {
+fn reports_an_unknown_section_after_a_late_title() {
     let document = format!(
         "{}\n# Приложение\n\n### Примечания\n\nТекст.\n",
         include_str!("fixtures/minimal.md")
@@ -269,5 +269,5 @@ fn does_not_report_an_unknown_section_after_a_late_title() {
         "[document]\nallow_unknown_sections = false\n",
         true
     ))
-    .is_equal_to(vec![rule("MDS005", 9)]);
+    .is_equal_to(vec![rule("MDS005", 9), rule("MDS006", 11)]);
 }

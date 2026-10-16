@@ -79,7 +79,7 @@ Only a file passed with `--config` is read. Unknown keys are errors. All keys an
 - `document.require_endpoint = false` allows documents without the endpoint heading and path.
 - `document.allow_unknown_sections = false` rejects sections not listed in `[labels]`.
 - `document.require_examples = true` requires the examples section.
-- Every `## <endpoint_prefix> name` heading starts an endpoint that runs to the next H2. Section and component rules apply per endpoint. An optional H1 title and other H2 sections such as general rules are not checked. Link definitions go in each endpoint's references section or in one H2 references section at the end of the document.
+- Every `## <endpoint_prefix> name` heading starts an endpoint that runs to the next H2. Section and component rules apply per endpoint. An optional H1 title and other H2 sections such as general rules are not checked. An H1 after the first H2 is reported as MDS005 and otherwise ignored. Link definitions go in each endpoint's references section or in one H2 references section at the end of the document.
 - Components come in two kinds. Internal components live in an endpoint's `### Components` section and may only be linked from that endpoint. General components live in one `## Components` section after the last endpoint and before `## References`, or in a separate file with no endpoint, and every one must be linked at least once from an endpoint or another component. Only files in the same `mdspec check` run count.
 - `references.require_reference_style = false` allows inline local links.
 - `references.definitions_at_end = false` allows definitions anywhere.

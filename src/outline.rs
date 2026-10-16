@@ -20,7 +20,6 @@ pub struct Endpoint<'a> {
     pub name: &'a str,
     pub intro: &'a [Block],
     pub sections: Vec<Section<'a>>,
-    pub detached: Vec<Section<'a>>,
 }
 
 pub struct General<'a> {
@@ -131,16 +130,9 @@ pub fn children(blocks: &[Block], index: usize, depth: u8) -> &[Block] {
     let rest = blocks.get(index + 1..).unwrap_or_default();
     let length = rest
         .iter()
-        .position(|block| matches!(block.kind, BlockKind::Heading { level, .. } if level <= depth))
+        .position(|block| matches!(block.kind, BlockKind::Heading { level, .. } if level != level::TITLE && level <= depth))
         .unwrap_or(rest.len());
     rest.get(..length).unwrap_or_default()
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Target {
-    Sections,
-    Detached,
-    Closed,
 }
 
 struct Builder<'a, 'l> {
@@ -149,7 +141,6 @@ struct Builder<'a, 'l> {
     outline: Outline<'a>,
     current_section: Option<SectionKind>,
     in_component: bool,
-    target: Target,
 }
 
 pub fn build<'a>(document: &'a Document, labels: &Labels) -> Outline<'a> {
@@ -165,7 +156,6 @@ pub fn build<'a>(document: &'a Document, labels: &Labels) -> Outline<'a> {
         },
         current_section: None,
         in_component: false,
-        target: Target::Sections,
     };
     for (index, block) in document.blocks.iter().enumerate() {
         if let BlockKind::Heading { level, .. } = block.kind {
@@ -211,12 +201,8 @@ impl<'a> Builder<'a, '_> {
             .push(children(self.blocks, index, ends_before_level));
     }
 
-    const fn accept_title(&mut self) -> bool {
-        let first = self.outline.parts.is_empty();
-        if !first {
-            self.target = Target::Closed;
-        }
-        first
+    const fn accept_title(&self) -> bool {
+        self.outline.parts.is_empty()
     }
 
     fn open_part(&mut self, index: usize, heading: &'a Block) {
@@ -234,14 +220,12 @@ impl<'a> Builder<'a, '_> {
                         name: name.trim(),
                         intro: children(self.blocks, index, level::SECTION),
                         sections: Vec::new(),
-                        detached: Vec::new(),
                     })
                 })
         };
         self.outline.parts.push(part);
         self.current_section = None;
         self.in_component = false;
-        self.target = Target::Sections;
     }
 
     fn accept_general_heading(&mut self, index: usize, heading: &'a Block, level: u8) -> bool {
@@ -259,9 +243,6 @@ impl<'a> Builder<'a, '_> {
     }
 
     fn attach_general_item(&mut self, index: usize, heading: &'a Block) {
-        if self.target != Target::Sections {
-            return;
-        }
         if let Some(Part::General(general)) = self.outline.parts.last_mut() {
             general.items.push(Item {
                 heading,
@@ -299,13 +280,7 @@ impl<'a> Builder<'a, '_> {
         };
         match self.outline.parts.last_mut() {
             None => self.outline.preamble.push(heading),
-            Some(Part::Endpoint(endpoint)) if self.target == Target::Sections => {
-                endpoint.sections.push(section);
-            }
-            Some(Part::Endpoint(endpoint)) => {
-                endpoint.detached.push(section);
-                self.target = Target::Detached;
-            }
+            Some(Part::Endpoint(endpoint)) => endpoint.sections.push(section),
             Some(Part::General(_) | Part::Other(_)) => {}
         }
     }
@@ -314,12 +289,8 @@ impl<'a> Builder<'a, '_> {
         let Some(Part::Endpoint(endpoint)) = self.outline.parts.last_mut() else {
             return;
         };
-        let sections = match self.target {
-            Target::Sections => &mut endpoint.sections,
-            Target::Detached => &mut endpoint.detached,
-            Target::Closed => return,
-        };
-        if let Some(section) = sections
+        if let Some(section) = endpoint
+            .sections
             .last_mut()
             .filter(|section| section.kind.has_items())
         {

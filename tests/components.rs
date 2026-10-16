@@ -348,11 +348,24 @@ fn keeps_an_internal_component_after_a_late_title_scoped_to_its_endpoint() {
 }
 
 #[test]
-fn does_not_declare_general_components_after_a_late_title() {
+fn declares_general_components_after_a_late_title() {
     let workspace = Workspace::new();
     let document = format!(
         "{PLAIN}## Компоненты\n\n### А\n\n#### Описание\n\nТ.\n\n# Приложение\n\n### Б\n\nТ.\n"
     );
+    assert_that!(workspace.check_rules(&document, "", true)).is_equal_to(vec![
+        rule("MDS018", 11),
+        rule("MDS005", 17),
+        rule("MDS008", 19),
+        rule("MDS018", 19),
+    ]);
+}
+
+#[test]
+fn counts_description_text_after_a_late_title() {
+    let workspace = Workspace::new();
+    let document =
+        format!("{PLAIN}## Компоненты\n\n### А\n\n#### Описание\n\n# Приложение\n\nТ.\n");
     assert_that!(workspace.check_rules(&document, "", true))
-        .is_equal_to(vec![rule("MDS018", 11), rule("MDS005", 17)]);
+        .is_equal_to(vec![rule("MDS018", 11), rule("MDS005", 15)]);
 }
