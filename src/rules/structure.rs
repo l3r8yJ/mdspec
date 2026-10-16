@@ -12,7 +12,6 @@ pub fn check(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
         .flat_map(|source| {
             let (outline, path) = (&source.outline, source.path);
             let mut diagnostics = endpoint_headings(outline, path, config);
-            diagnostics.extend(placement(outline, path, config));
             diagnostics.extend(nesting(outline, path, config));
             diagnostics.extend(unknown_sections(outline, path, config));
             diagnostics
@@ -47,38 +46,6 @@ fn endpoint_headings(outline: &Outline, path: &Path, config: &Config) -> Vec<Dia
             )
         });
     missing.into_iter().chain(unnamed).collect()
-}
-
-fn placement(outline: &Outline, path: &Path, config: &Config) -> Vec<Diagnostic> {
-    outline
-        .parts
-        .iter()
-        .enumerate()
-        .filter_map(|(index, part)| match part {
-            Part::General(general) => Some((index, general)),
-            Part::Endpoint(_) | Part::Other(_) => None,
-        })
-        .enumerate()
-        .filter(|(number, (index, _))| {
-            *number > 0
-                || outline
-                    .parts
-                    .iter()
-                    .skip(*index)
-                    .any(|part| matches!(part, Part::Endpoint(_)))
-        })
-        .map(|(_, (_, general))| {
-            Diagnostic::error(
-                Rule::Mds004,
-                path,
-                Some(general.heading.span.start),
-                format!(
-                    "The H2 {} section must appear once, after every endpoint",
-                    config.labels.components
-                ),
-            )
-        })
-        .collect()
 }
 
 fn nesting(outline: &Outline, path: &Path, config: &Config) -> Vec<Diagnostic> {

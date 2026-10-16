@@ -1,11 +1,12 @@
 use crate::config::{Config, Labels};
 use crate::diagnostics::Diagnostic;
-use crate::model::{Block, BlockKind, Document, Position};
+use crate::model::{Block, BlockKind, Document};
 use crate::outline::{Endpoint, General, Item, Outline, Section, SectionKind, children, level};
 use crate::rule::Rule;
 use std::collections::HashSet;
 use std::path::Path;
 
+mod sections;
 mod structure;
 
 pub struct Source<'a> {
@@ -16,7 +17,7 @@ pub struct Source<'a> {
 
 type Check = fn(&[Source<'_>], &Config) -> Vec<Diagnostic>;
 
-const CHECKS: &[Check] = &[structure::check, unmigrated];
+const CHECKS: &[Check] = &[structure::check, sections::check, unmigrated];
 
 pub fn check(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
     CHECKS
@@ -46,7 +47,6 @@ fn endpoint_rules(outline: &Outline, path: &Path, config: &Config) -> Vec<Diagno
     let mut diagnostics = Vec::new();
     for endpoint in outline.endpoints() {
         diagnostics.extend(validate_path(endpoint, path, config));
-        diagnostics.extend(validate_sections(endpoint, path, config));
         validate_details(&endpoint.sections, path, &config.labels, &mut diagnostics);
     }
     for general in outline.general() {
@@ -79,16 +79,7 @@ fn validate_details(
 }
 
 fn validate_general_components(general: &General, path: &Path, labels: &Labels) -> Vec<Diagnostic> {
-    let mut diagnostics = validate_components(&general.items, level::GENERAL_ITEM, path, labels);
-    if general.items.is_empty() {
-        diagnostics.push(issue(
-            Rule::Mds007,
-            path,
-            general.heading,
-            format!("Empty section: {}", labels.components),
-        ));
-    }
-    diagnostics
+    validate_components(&general.items, level::GENERAL_ITEM, path, labels)
 }
 
 fn validate_path(endpoint: &Endpoint, path: &Path, config: &Config) -> Vec<Diagnostic> {
@@ -127,58 +118,6 @@ fn validate_path(endpoint: &Endpoint, path: &Path, config: &Config) -> Vec<Diagn
             ));
         }
     }
-    diagnostics
-}
-
-fn validate_sections(endpoint: &Endpoint, path: &Path, config: &Config) -> Vec<Diagnostic> {
-    let mut diagnostics = Vec::new();
-    let mut seen = HashSet::new();
-    let mut next_rank = 0;
-    for section in &endpoint.sections {
-        let Some(rank) = section.kind.rank() else {
-            continue;
-        };
-        let name = section.heading.text.trim();
-        let unique = seen.insert(name);
-        let invalid_order = if config.document.enforce_section_order {
-            rank < next_rank
-        } else {
-            !unique
-        };
-        if invalid_order {
-            diagnostics.push(issue(
-                Rule::Mds004,
-                path,
-                section.heading,
-                format!(
-                    "Sections must be unique and ordered: {}",
-                    config.labels.sections().join(", ")
-                ),
-            ));
-        }
-        next_rank = next_rank.max(rank + 1);
-        let populated = match section.kind {
-            SectionKind::Logic => section.body.iter().any(has_content),
-            SectionKind::Components | SectionKind::Mappings | SectionKind::Examples => {
-                !section.items.is_empty()
-            }
-            SectionKind::References | SectionKind::Unknown => true,
-        };
-        if !populated {
-            diagnostics.push(issue(
-                Rule::Mds007,
-                path,
-                section.heading,
-                format!("Empty section: {name}"),
-            ));
-        }
-    }
-    diagnostics.extend(validate_required_sections(
-        &seen,
-        endpoint.heading.span.start,
-        path,
-        config,
-    ));
     diagnostics
 }
 
@@ -221,7 +160,7 @@ fn validate_components(items: &[Item], level: u8, path: &Path, labels: &Labels) 
             if number > 0
                 || !children(item.body, *description_index, level::below(level))
                     .iter()
-                    .any(has_content)
+                    .any(Block::has_content)
             {
                 diagnostics.push(issue(
                     Rule::Mds008,
@@ -255,47 +194,6 @@ fn valid_path(text: &str, labels: &Labels) -> bool {
     ) && path.starts_with('/')
         && parts.next().is_none()
         && !value.contains(['\n', '\r'])
-}
-
-fn validate_required_sections(
-    seen: &HashSet<&str>,
-    endpoint: Position,
-    path: &Path,
-    config: &Config,
-) -> Vec<Diagnostic> {
-    let mut diagnostics = Vec::new();
-    for (name, required) in [
-        (config.labels.logic.as_str(), config.document.require_logic),
-        (
-            config.labels.components.as_str(),
-            config.document.require_components,
-        ),
-        (
-            config.labels.mappings.as_str(),
-            config.document.require_mappings,
-        ),
-        (
-            config.labels.examples.as_str(),
-            config.document.require_examples,
-        ),
-    ] {
-        if required && !seen.contains(name) {
-            diagnostics.push(Diagnostic::error(
-                Rule::Mds003,
-                path,
-                Some(endpoint),
-                format!("Missing required section: {name}"),
-            ));
-        }
-    }
-    diagnostics
-}
-
-fn has_content(block: &Block) -> bool {
-    matches!(
-        block.kind,
-        BlockKind::Paragraph | BlockKind::Code | BlockKind::Content | BlockKind::Table(_)
-    ) && !block.text.trim().is_empty()
 }
 
 fn validate_examples(

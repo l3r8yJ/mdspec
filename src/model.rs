@@ -18,6 +18,15 @@ pub struct Block {
     pub text: String,
 }
 
+impl Block {
+    pub fn has_content(&self) -> bool {
+        matches!(
+            self.kind,
+            BlockKind::Paragraph | BlockKind::Code | BlockKind::Content | BlockKind::Table(_)
+        ) && !self.text.trim().is_empty()
+    }
+}
+
 #[derive(Debug)]
 pub enum BlockKind {
     Paragraph,
