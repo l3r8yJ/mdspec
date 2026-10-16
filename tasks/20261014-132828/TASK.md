@@ -2,7 +2,7 @@
 
 - STATUS: CLOSED
 - PRIORITY: 115
-- TAGS: refactor,v0.2.0
+- TAGS: refactor,v0.1.6
 
 With the outline in place, rule checks still live in one 600-line `rules.rs` plus `references.rs` and `components.rs`, and several rule IDs are emitted from more than one place.
 

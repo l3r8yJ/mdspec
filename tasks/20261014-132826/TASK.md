@@ -2,7 +2,7 @@
 
 - STATUS: CLOSED
 - PRIORITY: 125
-- TAGS: refactor,v0.2.0
+- TAGS: refactor,v0.1.6
 
 The parsed `Document` stores headings twice (`blocks` and `headings`), recomputes anchors on demand, uses byte offsets as identity and stores images as links.
 
