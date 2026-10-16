@@ -1,11 +1,12 @@
 use crate::config::{Config, Labels};
 use crate::diagnostics::Diagnostic;
 use crate::model::{Block, BlockKind, Document};
-use crate::outline::{Endpoint, General, Item, Outline, Section, SectionKind, children, level};
+use crate::outline::{General, Item, Outline, Section, SectionKind, children, level};
 use crate::rule::Rule;
 use std::collections::HashSet;
 use std::path::Path;
 
+mod path;
 mod sections;
 mod structure;
 
@@ -17,7 +18,7 @@ pub struct Source<'a> {
 
 type Check = fn(&[Source<'_>], &Config) -> Vec<Diagnostic>;
 
-const CHECKS: &[Check] = &[structure::check, sections::check, unmigrated];
+const CHECKS: &[Check] = &[structure::check, sections::check, path::check, unmigrated];
 
 pub fn check(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
     CHECKS
@@ -46,7 +47,6 @@ fn unmigrated(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
 fn endpoint_rules(outline: &Outline, path: &Path, config: &Config) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     for endpoint in outline.endpoints() {
-        diagnostics.extend(validate_path(endpoint, path, config));
         validate_details(&endpoint.sections, path, &config.labels, &mut diagnostics);
     }
     for general in outline.general() {
@@ -80,45 +80,6 @@ fn validate_details(
 
 fn validate_general_components(general: &General, path: &Path, labels: &Labels) -> Vec<Diagnostic> {
     validate_components(&general.items, level::GENERAL_ITEM, path, labels)
-}
-
-fn validate_path(endpoint: &Endpoint, path: &Path, config: &Config) -> Vec<Diagnostic> {
-    let mut diagnostics = Vec::new();
-    let paths: Vec<_> = endpoint
-        .intro
-        .iter()
-        .enumerate()
-        .filter(|(_, block)| {
-            matches!(block.kind, BlockKind::Paragraph)
-                && block
-                    .text
-                    .trim()
-                    .starts_with(config.labels.path_prefix.as_str())
-        })
-        .collect();
-    if paths.is_empty() {
-        diagnostics.push(issue(
-            Rule::Mds002,
-            path,
-            endpoint.heading,
-            format!("Missing {} METHOD /path", config.labels.path_prefix),
-        ));
-    }
-    for (index, block) in paths {
-        let immediately_after_endpoint = index == 0;
-        if !immediately_after_endpoint || !valid_path(&block.text, &config.labels) {
-            diagnostics.push(issue(
-                Rule::Mds002,
-                path,
-                block,
-                format!(
-                    "Expected one {} METHOD /path paragraph immediately after the endpoint heading",
-                    config.labels.path_prefix
-                ),
-            ));
-        }
-    }
-    diagnostics
 }
 
 fn validate_components(items: &[Item], level: u8, path: &Path, labels: &Labels) -> Vec<Diagnostic> {
@@ -179,21 +140,6 @@ fn validate_components(items: &[Item], level: u8, path: &Path, labels: &Labels) 
 
 fn issue(rule: Rule, path: &Path, block: &Block, message: impl Into<String>) -> Diagnostic {
     Diagnostic::error(rule, path, Some(block.span.start), message)
-}
-
-fn valid_path(text: &str, labels: &Labels) -> bool {
-    let Some(value) = text.trim().strip_prefix(labels.path_prefix.as_str()) else {
-        return false;
-    };
-    let mut parts = value.split_whitespace();
-    let method = parts.next().unwrap_or_default();
-    let path = parts.next().unwrap_or_default();
-    matches!(
-        method,
-        "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS" | "CONNECT" | "TRACE"
-    ) && path.starts_with('/')
-        && parts.next().is_none()
-        && !value.contains(['\n', '\r'])
 }
 
 fn validate_examples(
