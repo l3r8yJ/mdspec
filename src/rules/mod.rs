@@ -1,12 +1,48 @@
 use crate::config::{Config, Labels};
 use crate::diagnostics::Diagnostic;
-use crate::model::{Block, BlockKind, Position};
+use crate::model::{Block, BlockKind, Document, Position};
 use crate::outline::{Endpoint, General, Item, Outline, Section, SectionKind, children, level};
 use crate::rule::Rule;
 use std::collections::HashSet;
 use std::path::Path;
 
-pub fn validate(outline: &Outline, path: &Path, config: &Config) -> Vec<Diagnostic> {
+mod structure;
+
+pub struct Source<'a> {
+    pub path: &'a Path,
+    pub document: &'a Document,
+    pub outline: Outline<'a>,
+}
+
+type Check = fn(&[Source<'_>], &Config) -> Vec<Diagnostic>;
+
+const CHECKS: &[Check] = &[structure::check, unmigrated];
+
+pub fn check(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
+    CHECKS
+        .iter()
+        .flat_map(|check| check(sources, config))
+        .collect()
+}
+
+fn unmigrated(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
+    sources
+        .iter()
+        .flat_map(|source| {
+            let mut diagnostics = endpoint_rules(&source.outline, source.path, config);
+            diagnostics.extend(crate::references::validate(
+                source.document,
+                &source.outline,
+                source.path,
+                config,
+            ));
+            diagnostics
+        })
+        .chain(crate::components::validate(sources, config))
+        .collect()
+}
+
+fn endpoint_rules(outline: &Outline, path: &Path, config: &Config) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     for endpoint in outline.endpoints() {
         diagnostics.extend(validate_path(endpoint, path, config));

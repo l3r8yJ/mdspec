@@ -10,7 +10,6 @@ mod references;
 mod reporter;
 mod rule;
 mod rules;
-mod structure;
 mod workspace;
 
 use clap::Parser;
@@ -69,22 +68,15 @@ fn check(
             )),
         }
     }
-    let outlines: Vec<_> = documents
+    let sources: Vec<_> = documents
         .iter()
-        .map(|(file, document)| {
-            (
-                file.as_path(),
-                document,
-                outline::build(document, &config.labels),
-            )
+        .map(|(file, document)| rules::Source {
+            path: file,
+            document,
+            outline: outline::build(document, &config.labels),
         })
         .collect();
-    for (file, document, outline) in &outlines {
-        diagnostics.extend(structure::validate(outline, file, &config));
-        diagnostics.extend(rules::validate(outline, file, &config));
-        diagnostics.extend(references::validate(document, outline, file, &config));
-    }
-    diagnostics.extend(components::validate(&outlines, &config));
+    diagnostics.extend(rules::check(&sources, &config));
     if strict || config.diagnostics.warnings_as_errors {
         for diagnostic in &mut diagnostics {
             diagnostic.severity = Severity::Error;

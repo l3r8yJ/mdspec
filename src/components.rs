@@ -9,6 +9,7 @@ use crate::links::{self, Destination, percent_decode};
 use crate::model::{BlockKind, Document, LinkKind, Position};
 use crate::outline::{Item, Outline, Part, SectionKind};
 use crate::rule::Rule;
+use crate::rules::Source;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Scope {
@@ -37,14 +38,14 @@ struct Usage<'a> {
     scope: Option<Scope>,
 }
 
-pub fn validate(documents: &[(&Path, &Document, Outline)], config: &Config) -> Vec<Diagnostic> {
-    let components: Vec<_> = documents
+pub fn validate(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
+    let components: Vec<_> = sources
         .iter()
-        .flat_map(|(path, _, outline)| declared(path, outline))
+        .flat_map(|source| declared(source.path, &source.outline))
         .collect();
-    let usages: Vec<_> = documents
+    let usages: Vec<_> = sources
         .iter()
-        .flat_map(|(path, document, outline)| used(path, document, outline))
+        .flat_map(|source| used(source.path, source.document, &source.outline))
         .collect();
     let mut index: HashMap<Key, &Component> = HashMap::new();
     for component in &components {

@@ -3,14 +3,21 @@ use crate::diagnostics::Diagnostic;
 use crate::model::Block;
 use crate::outline::{Outline, Part, SectionKind};
 use crate::rule::Rule;
+use crate::rules::Source;
 use std::path::Path;
 
-pub fn validate(outline: &Outline, path: &Path, config: &Config) -> Vec<Diagnostic> {
-    let mut diagnostics = endpoint_headings(outline, path, config);
-    diagnostics.extend(placement(outline, path, config));
-    diagnostics.extend(nesting(outline, path, config));
-    diagnostics.extend(unknown_sections(outline, path, config));
-    diagnostics
+pub fn check(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
+    sources
+        .iter()
+        .flat_map(|source| {
+            let (outline, path) = (&source.outline, source.path);
+            let mut diagnostics = endpoint_headings(outline, path, config);
+            diagnostics.extend(placement(outline, path, config));
+            diagnostics.extend(nesting(outline, path, config));
+            diagnostics.extend(unknown_sections(outline, path, config));
+            diagnostics
+        })
+        .collect()
 }
 
 fn endpoint_headings(outline: &Outline, path: &Path, config: &Config) -> Vec<Diagnostic> {
