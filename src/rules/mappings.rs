@@ -3,23 +3,15 @@ use crate::diagnostics::Diagnostic;
 use crate::model::{Block, BlockKind};
 use crate::outline::{Item, Section, SectionKind, level};
 use crate::rule::Rule;
-use crate::rules::Source;
+use crate::rules::{Source, section_diagnostics};
 use std::path::Path;
 
 const HEADER_AND_ONE_ROW: usize = 2;
 
 pub fn check(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
-    sources
-        .iter()
-        .flat_map(|source| {
-            source
-                .outline
-                .endpoints()
-                .flat_map(|endpoint| &endpoint.sections)
-                .filter(|section| section.kind == SectionKind::Mappings)
-                .flat_map(|section| mapping(section, source.path, &config.labels))
-        })
-        .collect()
+    section_diagnostics(sources, SectionKind::Mappings, |section, path| {
+        mapping(section, path, &config.labels)
+    })
 }
 
 fn mapping(section: &Section, path: &Path, labels: &Labels) -> Vec<Diagnostic> {

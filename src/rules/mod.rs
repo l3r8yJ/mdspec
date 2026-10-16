@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::diagnostics::Diagnostic;
 use crate::model::Document;
-use crate::outline::Outline;
+use crate::outline::{Outline, Section, SectionKind};
 use std::path::Path;
 
 mod component_scope;
@@ -43,6 +43,24 @@ fn unmigrated(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
         .iter()
         .flat_map(|source| {
             crate::references::validate(source.document, &source.outline, source.path, config)
+        })
+        .collect()
+}
+
+fn section_diagnostics(
+    sources: &[Source],
+    kind: SectionKind,
+    check: impl Fn(&Section, &Path) -> Vec<Diagnostic>,
+) -> Vec<Diagnostic> {
+    sources
+        .iter()
+        .flat_map(|source| {
+            source
+                .outline
+                .endpoints()
+                .flat_map(|endpoint| &endpoint.sections)
+                .filter(|section| section.kind == kind)
+                .flat_map(|section| check(section, source.path))
         })
         .collect()
 }
