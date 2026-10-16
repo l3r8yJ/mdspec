@@ -547,7 +547,7 @@ Every task is also tagged with the release that ships it, e.g. `v0.1.3`, and tha
 
 ## Contributing
 
-Tasks live in [tasks/](tasks) in the [tatr](https://github.com/tsoding/tatr) layout: one `tasks/<YYYYMMDD-HHMMSS>/TASK.md` per task, with the time in UTC. Tags are described in [tasks/tags](tasks/tags). Reference the task ID in commits and PRs.
+Tasks live in [tasks/](tasks) in the [tatr](https://github.com/tsoding/tatr) layout: one `tasks/<YYYYMMDD-HHMMSS>/TASK.md` per task, with the time in UTC. Tags are described in [tasks/tags](tasks/tags). Reference the task ID in commits and PRs. [ARCHITECTURE.md](ARCHITECTURE.md) describes the pipeline and where a new rule goes.
 
 Install tools once:
 

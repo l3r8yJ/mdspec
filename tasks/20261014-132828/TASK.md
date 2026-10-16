@@ -1,6 +1,6 @@
 # Move each rule family onto the outline
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 115
 - TAGS: refactor,v0.2.0
 
