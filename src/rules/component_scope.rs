@@ -1,14 +1,14 @@
+use crate::config::Config;
+use crate::diagnostics::Diagnostic;
+use crate::links::{self, Destination, percent_decode};
+use crate::model::{BlockKind, Document, LinkKind, Position};
+use crate::outline::{Item, Outline, Part, SectionKind};
+use crate::rule::Rule;
+use crate::rules::Source;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
-
-use crate::config::Config;
-use crate::diagnostics::Diagnostic;
-use crate::model::{BlockKind, Document, LinkKind, Position};
-use crate::outline::{Item, Outline, Part, SectionKind};
-use crate::references::{is_local, percent_decode};
-use crate::rule::Rule;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Scope {
@@ -37,14 +37,14 @@ struct Usage<'a> {
     scope: Option<Scope>,
 }
 
-pub fn validate(documents: &[(&Path, &Document, Outline)], config: &Config) -> Vec<Diagnostic> {
-    let components: Vec<_> = documents
+pub fn check(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
+    let components: Vec<_> = sources
         .iter()
-        .flat_map(|(path, _, outline)| declared(path, outline))
+        .flat_map(|source| declared(source.path, &source.outline))
         .collect();
-    let usages: Vec<_> = documents
+    let usages: Vec<_> = sources
         .iter()
-        .flat_map(|(path, document, outline)| used(path, document, outline))
+        .flat_map(|source| used(source.path, source.document, &source.outline))
         .collect();
     let mut index: HashMap<Key, &Component> = HashMap::new();
     for component in &components {
@@ -141,22 +141,15 @@ fn used<'a>(path: &'a Path, document: &Document, outline: &Outline) -> Vec<Usage
 }
 
 fn local_target(url: &str, from: &Path) -> Option<(PathBuf, String)> {
-    if !is_local(url) {
+    let Destination::Local {
+        file,
+        fragment: Some(fragment),
+        ..
+    } = links::resolve(url, from)
+    else {
         return None;
-    }
-    let (resource, fragment) = url.split_once('#')?;
-    let resource = resource
-        .split_once('?')
-        .map_or(resource, |(resource, _)| resource);
-    let resource = percent_decode(resource)?;
-    let target = if resource.is_empty() {
-        from.to_path_buf()
-    } else {
-        from.parent()
-            .unwrap_or_else(|| Path::new("."))
-            .join(resource)
     };
-    Some((fs::canonicalize(target).ok()?, percent_decode(fragment)?))
+    Some((fs::canonicalize(file).ok()?, percent_decode(fragment)?))
 }
 
 fn canonical(path: &Path) -> PathBuf {
