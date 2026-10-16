@@ -2,7 +2,7 @@
 
 - STATUS: CLOSED
 - PRIORITY: 112
-- TAGS: refactor,v0.2.0
+- TAGS: refactor,v0.1.6
 
 Meaningful values appear as bare numeric literals, so a reader has to know the heading scheme or the CLI contract to follow the code: `children(blocks, index, 3)`, `matches!(…, Heading { level: 4, .. })`, `ExitCode::from(2)`, `schema_version: 1`, `to_digit(16)`, `rows.len() < 2`.
 

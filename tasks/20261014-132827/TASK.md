@@ -2,7 +2,7 @@
 
 - STATUS: CLOSED
 - PRIORITY: 120
-- TAGS: refactor,v0.2.0
+- TAGS: refactor,v0.1.6
 
 Every rule rebuilds the document structure (endpoint, section, component, description) from heading levels, label comparisons and byte offsets.
 

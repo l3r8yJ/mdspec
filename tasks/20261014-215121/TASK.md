@@ -2,7 +2,7 @@
 
 - STATUS: CLOSED
 - PRIORITY: 110
-- TAGS: refactor,v0.2.0
+- TAGS: refactor,v0.1.6
 
 An H1 that appears after the first endpoint (a "late title") is handled three different ways today, and the outline reproduces all three through `Endpoint.detached` and the builder's `Target::{Sections, Detached, Closed}` states, only to keep diagnostics unchanged during the outline refactor.
 
