@@ -4,7 +4,7 @@ use crate::model::{Block, BlockKind, Document, NestedHeading};
 pub struct Outline<'a> {
     pub preamble: Vec<&'a Block>,
     pub parts: Vec<Part<'a>>,
-    pub references: Vec<&'a [Block]>,
+    pub references: Vec<Vec<&'a Block>>,
     pub stray: Vec<&'a Block>,
     pub nested: &'a [NestedHeading],
 }
@@ -18,9 +18,8 @@ pub enum Part<'a> {
 pub struct Endpoint<'a> {
     pub heading: &'a Block,
     pub name: &'a str,
-    pub intro: &'a [Block],
+    pub intro: Vec<&'a Block>,
     pub sections: Vec<Section<'a>>,
-    pub detached: Vec<Section<'a>>,
 }
 
 pub struct General<'a> {
@@ -31,13 +30,13 @@ pub struct General<'a> {
 pub struct Section<'a> {
     pub heading: &'a Block,
     pub kind: SectionKind,
-    pub body: &'a [Block],
+    pub body: Vec<&'a Block>,
     pub items: Vec<Item<'a>>,
 }
 
 pub struct Item<'a> {
     pub heading: &'a Block,
-    pub body: &'a [Block],
+    pub body: Vec<&'a Block>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -127,20 +126,24 @@ pub mod level {
 
 const TO_END_OF_DOCUMENT: u8 = 0;
 
-pub fn children(blocks: &[Block], index: usize, depth: u8) -> &[Block] {
-    let rest = blocks.get(index + 1..).unwrap_or_default();
-    let length = rest
-        .iter()
-        .position(|block| matches!(block.kind, BlockKind::Heading { level, .. } if level <= depth))
-        .unwrap_or(rest.len());
-    rest.get(..length).unwrap_or_default()
+pub fn children<'a>(following: impl IntoIterator<Item = &'a Block>, depth: u8) -> Vec<&'a Block> {
+    following
+        .into_iter()
+        .filter(|block| !is_title(block))
+        .take_while(
+            |block| !matches!(block.kind, BlockKind::Heading { level: heading_level, .. } if heading_level <= depth),
+        )
+        .collect()
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Target {
-    Sections,
-    Detached,
-    Closed,
+const fn is_title(block: &Block) -> bool {
+    matches!(
+        block.kind,
+        BlockKind::Heading {
+            level: level::TITLE,
+            ..
+        }
+    )
 }
 
 struct Builder<'a, 'l> {
@@ -149,7 +152,6 @@ struct Builder<'a, 'l> {
     outline: Outline<'a>,
     current_section: Option<SectionKind>,
     in_component: bool,
-    target: Target,
 }
 
 pub fn build<'a>(document: &'a Document, labels: &Labels) -> Outline<'a> {
@@ -165,7 +167,6 @@ pub fn build<'a>(document: &'a Document, labels: &Labels) -> Outline<'a> {
         },
         current_section: None,
         in_component: false,
-        target: Target::Sections,
     };
     for (index, block) in document.blocks.iter().enumerate() {
         if let BlockKind::Heading { level, .. } = block.kind {
@@ -176,6 +177,10 @@ pub fn build<'a>(document: &'a Document, labels: &Labels) -> Outline<'a> {
 }
 
 impl<'a> Builder<'a, '_> {
+    fn children(&self, index: usize, depth: u8) -> Vec<&'a Block> {
+        children(self.blocks.iter().skip(index + 1), depth)
+    }
+
     fn place(&mut self, index: usize, heading: &'a Block, level: u8) {
         self.record_references_section(index, heading, level);
         let fits = match level {
@@ -208,15 +213,11 @@ impl<'a> Builder<'a, '_> {
         };
         self.outline
             .references
-            .push(children(self.blocks, index, ends_before_level));
+            .push(self.children(index, ends_before_level));
     }
 
-    const fn accept_title(&mut self) -> bool {
-        let first = self.outline.parts.is_empty();
-        if !first {
-            self.target = Target::Closed;
-        }
-        first
+    const fn accept_title(&self) -> bool {
+        self.outline.parts.is_empty()
     }
 
     fn open_part(&mut self, index: usize, heading: &'a Block) {
@@ -232,16 +233,14 @@ impl<'a> Builder<'a, '_> {
                     Part::Endpoint(Endpoint {
                         heading,
                         name: name.trim(),
-                        intro: children(self.blocks, index, level::SECTION),
+                        intro: self.children(index, level::SECTION),
                         sections: Vec::new(),
-                        detached: Vec::new(),
                     })
                 })
         };
         self.outline.parts.push(part);
         self.current_section = None;
         self.in_component = false;
-        self.target = Target::Sections;
     }
 
     fn accept_general_heading(&mut self, index: usize, heading: &'a Block, level: u8) -> bool {
@@ -259,14 +258,12 @@ impl<'a> Builder<'a, '_> {
     }
 
     fn attach_general_item(&mut self, index: usize, heading: &'a Block) {
-        if self.target != Target::Sections {
-            return;
-        }
+        let item = Item {
+            heading,
+            body: self.children(index, level::GENERAL_ITEM),
+        };
         if let Some(Part::General(general)) = self.outline.parts.last_mut() {
-            general.items.push(Item {
-                heading,
-                body: children(self.blocks, index, level::GENERAL_ITEM),
-            });
+            general.items.push(item);
         }
     }
 
@@ -294,39 +291,30 @@ impl<'a> Builder<'a, '_> {
         let section = Section {
             heading,
             kind,
-            body: children(self.blocks, index, level::SECTION),
+            body: self.children(index, level::SECTION),
             items: Vec::new(),
         };
         match self.outline.parts.last_mut() {
             None => self.outline.preamble.push(heading),
-            Some(Part::Endpoint(endpoint)) if self.target == Target::Sections => {
-                endpoint.sections.push(section);
-            }
-            Some(Part::Endpoint(endpoint)) => {
-                endpoint.detached.push(section);
-                self.target = Target::Detached;
-            }
+            Some(Part::Endpoint(endpoint)) => endpoint.sections.push(section),
             Some(Part::General(_) | Part::Other(_)) => {}
         }
     }
 
     fn attach_section_item(&mut self, index: usize, heading: &'a Block) {
+        let item = Item {
+            heading,
+            body: self.children(index, level::SECTION_ITEM),
+        };
         let Some(Part::Endpoint(endpoint)) = self.outline.parts.last_mut() else {
             return;
         };
-        let sections = match self.target {
-            Target::Sections => &mut endpoint.sections,
-            Target::Detached => &mut endpoint.detached,
-            Target::Closed => return,
-        };
-        if let Some(section) = sections
+        if let Some(section) = endpoint
+            .sections
             .last_mut()
             .filter(|section| section.kind.has_items())
         {
-            section.items.push(Item {
-                heading,
-                body: children(self.blocks, index, level::SECTION_ITEM),
-            });
+            section.items.push(item);
         }
     }
 }

@@ -258,7 +258,7 @@ fn rejects_a_structural_heading_inside_a_blockquote() {
 }
 
 #[test]
-fn does_not_report_an_unknown_section_after_a_late_title() {
+fn reports_an_unknown_section_after_a_late_title() {
     let document = format!(
         "{}\n# Приложение\n\n### Примечания\n\nТекст.\n",
         include_str!("fixtures/minimal.md")
@@ -269,5 +269,26 @@ fn does_not_report_an_unknown_section_after_a_late_title() {
         "[document]\nallow_unknown_sections = false\n",
         true
     ))
-    .is_equal_to(vec![rule("MDS005", 9)]);
+    .is_equal_to(vec![rule("MDS005", 9), rule("MDS006", 11)]);
+}
+
+#[test]
+fn accepts_a_mapping_table_after_a_late_title_as_directly_under_its_heading() {
+    let document = "## Эндпоинт: А\n\nPath: `GET /a`\n\n### Логика работы\n\nТекст.\n\n### Маппинги\n\n#### Поля\n\n# Поздний\n\n| Source | Target |\n| --- | --- |\n| a | b |\n";
+    let workspace = Workspace::new();
+    assert_that!(workspace.check_rules(document, "", true)).is_equal_to(vec![rule("MDS005", 13)]);
+}
+
+#[test]
+fn counts_logic_text_after_a_late_title() {
+    let document = "## Эндпоинт: А\n\nPath: `GET /a`\n\n### Логика работы\n\n# Поздний\n\nТекст.\n";
+    let workspace = Workspace::new();
+    assert_that!(workspace.check_rules(document, "", true)).is_equal_to(vec![rule("MDS005", 7)]);
+}
+
+#[test]
+fn counts_an_example_code_block_after_a_late_title() {
+    let document = "## Эндпоинт: А\n\nPath: `GET /a`\n\n### Логика работы\n\nТекст.\n\n### Примеры\n\n#### Запрос\n\n# Поздний\n\n```json\n{}\n```\n";
+    let workspace = Workspace::new();
+    assert_that!(workspace.check_rules(document, "", true)).is_equal_to(vec![rule("MDS005", 13)]);
 }

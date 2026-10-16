@@ -1,6 +1,6 @@
 # Decide what a late title means
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 110
 - TAGS: refactor,v0.2.0
 

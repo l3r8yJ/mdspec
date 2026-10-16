@@ -54,7 +54,7 @@ fn described(
             .iter()
             .enumerate()
             .filter(|(_, child)| {
-                matches!(child.kind, BlockKind::Heading { level: depth, .. } if depth == description_level)
+                matches!(child.kind, BlockKind::Heading { level: heading_level, .. } if heading_level == description_level)
                     && child.text.trim() == labels.description
             })
             .collect();
@@ -71,9 +71,12 @@ fn described(
         }
         for (number, (description_index, description)) in descriptions.iter().enumerate() {
             if number > 0
-                || !children(item.body, *description_index, description_level)
-                    .iter()
-                    .any(Block::has_content)
+                || !children(
+                    item.body.iter().copied().skip(description_index + 1),
+                    description_level,
+                )
+                .into_iter()
+                .any(Block::has_content)
             {
                 diagnostics.push(Diagnostic::error(
                     Rule::Mds008,

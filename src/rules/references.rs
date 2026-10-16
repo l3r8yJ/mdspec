@@ -222,7 +222,7 @@ fn checked_links<'a>(document: &'a Document, config: &'a Config) -> impl Iterato
         .filter(|link| !(link.table_of_contents && config.references.toc_allowed))
 }
 
-fn definition_is_terminal(section: &[Block], offset: usize) -> bool {
+fn definition_is_terminal(section: &[&Block], offset: usize) -> bool {
     section
         .iter()
         .all(|block| matches!(block.kind, BlockKind::Definition))
