@@ -271,3 +271,10 @@ fn reports_an_unknown_section_after_a_late_title() {
     ))
     .is_equal_to(vec![rule("MDS005", 9), rule("MDS006", 11)]);
 }
+
+#[test]
+fn accepts_a_mapping_table_after_a_late_title_as_directly_under_its_heading() {
+    let document = "## Эндпоинт: А\n\nPath: `GET /a`\n\n### Логика работы\n\nТекст.\n\n### Маппинги\n\n#### Поля\n\n# Поздний\n\n| Source | Target |\n| --- | --- |\n| a | b |\n";
+    let workspace = Workspace::new();
+    assert_that!(workspace.check_rules(document, "", true)).is_equal_to(vec![rule("MDS005", 13)]);
+}

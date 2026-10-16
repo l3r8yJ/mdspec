@@ -61,7 +61,7 @@ fn order(endpoint: &Endpoint, path: &Path, config: &Config) -> Vec<Diagnostic> {
 
 fn empty(section: &Section, path: &Path) -> Option<Diagnostic> {
     let populated = match section.kind {
-        SectionKind::Logic => section.body.iter().any(Block::has_content),
+        SectionKind::Logic => section.body.iter().copied().any(Block::has_content),
         SectionKind::Components | SectionKind::Mappings | SectionKind::Examples => {
             !section.items.is_empty()
         }

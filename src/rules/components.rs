@@ -71,9 +71,12 @@ fn described(
         }
         for (number, (description_index, description)) in descriptions.iter().enumerate() {
             if number > 0
-                || !children(item.body, *description_index, description_level)
-                    .iter()
-                    .any(Block::has_content)
+                || !children(
+                    item.body.iter().copied().skip(description_index + 1),
+                    description_level,
+                )
+                .into_iter()
+                .any(Block::has_content)
             {
                 diagnostics.push(Diagnostic::error(
                     Rule::Mds008,

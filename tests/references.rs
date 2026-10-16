@@ -3,7 +3,7 @@
 mod common;
 
 use asserting::prelude::*;
-use common::{Workspace, check_fixture};
+use common::{Workspace, check_fixture, rule};
 
 fn document(content: &str) -> String {
     format!("{}\n{content}\n", include_str!("fixtures/minimal.md"))
@@ -231,4 +231,11 @@ fn counts_a_reference_style_image_as_using_its_definition() {
     );
     assert_that!(status).is_equal_to(Some(0));
     assert_that!(common::rules_with_lines(&report)).is_empty();
+}
+
+#[test]
+fn ignores_a_late_title_after_the_references_section() {
+    let document = "## Эндпоинт: А\n\nPath: `GET /a`\n\n### Логика работы\n\n[x][a].\n\n## Ссылки\n\n[a]: #эндпоинт-а\n\n# Поздний\n";
+    let workspace = Workspace::new();
+    assert_that!(workspace.check_rules(document, "", true)).is_equal_to(vec![rule("MDS005", 13)]);
 }

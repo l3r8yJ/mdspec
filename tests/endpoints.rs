@@ -128,3 +128,10 @@ fn treats_headings_after_a_late_title_as_part_of_the_endpoint() {
         rule("MDS004", 17),
     ]);
 }
+
+#[test]
+fn accepts_a_path_after_a_late_title_as_immediately_after_the_endpoint_heading() {
+    let document = "## Эндпоинт: А\n\n# Поздний\n\nPath: `GET /a`\n\n### Логика работы\n\nТекст.\n";
+    let workspace = Workspace::new();
+    assert_that!(workspace.check_rules(document, "", true)).is_equal_to(vec![rule("MDS005", 3)]);
+}
