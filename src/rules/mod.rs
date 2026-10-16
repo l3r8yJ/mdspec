@@ -9,6 +9,7 @@ mod components;
 mod examples;
 mod mappings;
 mod path;
+mod references;
 mod sections;
 mod structure;
 
@@ -28,22 +29,13 @@ const CHECKS: &[Check] = &[
     component_scope::check,
     mappings::check,
     examples::check,
-    unmigrated,
+    references::check,
 ];
 
 pub fn check(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
     CHECKS
         .iter()
         .flat_map(|check| check(sources, config))
-        .collect()
-}
-
-fn unmigrated(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
-    sources
-        .iter()
-        .flat_map(|source| {
-            crate::references::validate(source.document, &source.outline, source.path, config)
-        })
         .collect()
 }
 

@@ -5,7 +5,6 @@ mod links;
 mod model;
 mod outline;
 mod parser;
-mod references;
 mod reporter;
 mod rule;
 mod rules;

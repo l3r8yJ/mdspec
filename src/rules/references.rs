@@ -6,49 +6,45 @@ use crate::config::Config;
 use crate::diagnostics::{Diagnostic, Severity};
 use crate::links::{self, Destination, percent_decode};
 use crate::model::{Block, BlockKind, Document, Link, LinkKind, Position};
-use crate::outline::Outline;
 use crate::parser;
 use crate::rule::Rule;
+use crate::rules::Source;
 
 type TargetCache = HashMap<PathBuf, Result<HashSet<String>, String>>;
 
 struct Validation<'a> {
-    document: &'a Document,
-    outline: &'a Outline<'a>,
-    path: &'a Path,
+    source: &'a Source<'a>,
     config: &'a Config,
     cache: TargetCache,
     diagnostics: Vec<Diagnostic>,
 }
 
-pub fn validate(
-    document: &Document,
-    outline: &Outline,
-    path: &Path,
-    config: &Config,
-) -> Vec<Diagnostic> {
-    let mut validation = Validation {
-        document,
-        outline,
-        path,
-        config,
-        cache: HashMap::new(),
-        diagnostics: Vec::new(),
-    };
-    validation.placement();
-    validation.links();
-    validation.definitions();
-    validation.diagnostics
+pub fn check(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
+    sources
+        .iter()
+        .flat_map(|source| {
+            let mut validation = Validation {
+                source,
+                config,
+                cache: HashMap::new(),
+                diagnostics: Vec::new(),
+            };
+            validation.placement();
+            validation.links();
+            validation.definitions();
+            validation.diagnostics
+        })
+        .collect()
 }
 
 impl Validation<'_> {
     fn error(&mut self, rule: Rule, position: Option<Position>, message: impl Into<String>) {
         self.diagnostics
-            .push(Diagnostic::error(rule, self.path, position, message));
+            .push(Diagnostic::error(rule, self.source.path, position, message));
     }
 
     fn links(&mut self) {
-        for link in checked_links(self.document, self.config) {
+        for link in checked_links(self.source.document, self.config) {
             match (&link.key, &link.url) {
                 (Some(key), None) => self.error(
                     Rule::Mds011,
@@ -75,16 +71,17 @@ impl Validation<'_> {
 
     fn definitions(&mut self) {
         let used: HashSet<&str> = self
+            .source
             .document
             .links
             .iter()
             .filter_map(|link| link.key.as_deref())
             .collect();
-        for definition in &self.document.definitions {
+        for definition in &self.source.document.definitions {
             if !used.contains(definition.key.as_str()) {
                 let mut diagnostic = Diagnostic::error(
                     Rule::Mds016,
-                    self.path,
+                    self.source.path,
                     Some(definition.position),
                     "Reference definition is unused",
                 );
@@ -96,13 +93,16 @@ impl Validation<'_> {
     }
 
     fn placement(&mut self) {
-        let outline = self.outline;
-        let sections = &outline.references;
-        let first_link =
-            checked_links(self.document, self.config).find(|link| link.kind == LinkKind::Link);
-        if sections.is_empty() && (first_link.is_some() || !self.document.definitions.is_empty()) {
+        let source = self.source;
+        let sections = &source.outline.references;
+        let first_link = checked_links(self.source.document, self.config)
+            .find(|link| link.kind == LinkKind::Link);
+        if sections.is_empty()
+            && (first_link.is_some() || !self.source.document.definitions.is_empty())
+        {
             let position = first_link.map(|link| link.position).or_else(|| {
-                self.document
+                self.source
+                    .document
                     .definitions
                     .first()
                     .map(|definition| definition.position)
@@ -119,7 +119,7 @@ impl Validation<'_> {
         if !self.config.references.definitions_at_end {
             return;
         }
-        for definition in &self.document.definitions {
+        for definition in &self.source.document.definitions {
             if !sections
                 .iter()
                 .any(|section| definition_is_terminal(section, definition.position.offset))
@@ -148,7 +148,7 @@ impl Validation<'_> {
         {
             return;
         }
-        match links::resolve(url, self.path) {
+        match links::resolve(url, self.source.path) {
             Destination::External => {}
             Destination::InvalidPath => self.error(
                 Rule::Mds012,
@@ -193,8 +193,8 @@ impl Validation<'_> {
             );
             return;
         };
-        let target_anchors = if target == self.path {
-            Ok(anchors(self.document))
+        let target_anchors = if target == self.source.path {
+            Ok(anchors(self.source.document))
         } else {
             target_anchors(target, &mut self.cache)
         };
