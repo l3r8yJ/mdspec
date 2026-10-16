@@ -262,14 +262,16 @@ pub fn is_local(url: &str) -> bool {
         }))
 }
 
+const HEX_RADIX: u32 = 16;
+
 pub fn percent_decode(value: &str) -> Option<String> {
     let mut decoded = Vec::with_capacity(value.len());
     let mut bytes = value.bytes();
     while let Some(byte) = bytes.next() {
         if byte == b'%' {
-            let high = u8::try_from(char::from(bytes.next()?).to_digit(16)?).ok()?;
-            let low = u8::try_from(char::from(bytes.next()?).to_digit(16)?).ok()?;
-            decoded.push(high * 16 + low);
+            let high = char::from(bytes.next()?).to_digit(HEX_RADIX)?;
+            let low = char::from(bytes.next()?).to_digit(HEX_RADIX)?;
+            decoded.push(u8::try_from(high * HEX_RADIX + low).ok()?);
         } else {
             decoded.push(byte);
         }

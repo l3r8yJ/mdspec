@@ -40,7 +40,7 @@ fn main() -> ExitCode {
         Err(error) if error.kind() == io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("Could not write report: {error}");
-            ExitCode::from(2)
+            ExitCode::from(reporter::exit::OPERATIONAL_ERROR)
         }
     }
 }
