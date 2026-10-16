@@ -3,39 +3,32 @@ use crate::diagnostics::Diagnostic;
 use crate::model::{Block, BlockKind};
 use crate::outline::{Item, SectionKind, children, level};
 use crate::rule::Rule;
-use crate::rules::Source;
+use crate::rules::{Source, endpoint_section_diagnostics};
 use std::collections::HashSet;
 use std::path::Path;
 
 pub fn check(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
     let labels = &config.labels;
-    sources
-        .iter()
-        .flat_map(|source| {
-            let endpoint_items = source
-                .outline
-                .endpoints()
-                .flat_map(|endpoint| &endpoint.sections)
-                .filter(|section| section.kind == SectionKind::Components)
-                .flat_map(|section| {
-                    described(
-                        &section.items,
-                        level::SECTION_ITEM_DESCRIPTION,
-                        source.path,
-                        labels,
-                    )
-                });
-            let general_items = source.outline.general().flat_map(|general| {
-                described(
-                    &general.items,
-                    level::GENERAL_ITEM_DESCRIPTION,
-                    source.path,
-                    labels,
-                )
-            });
-            endpoint_items.chain(general_items)
+    let endpoint_items =
+        endpoint_section_diagnostics(sources, SectionKind::Components, |section, path| {
+            described(
+                &section.items,
+                level::SECTION_ITEM_DESCRIPTION,
+                path,
+                labels,
+            )
+        });
+    let general_items = sources.iter().flat_map(|source| {
+        source.outline.general().flat_map(|general| {
+            described(
+                &general.items,
+                level::GENERAL_ITEM_DESCRIPTION,
+                source.path,
+                labels,
+            )
         })
-        .collect()
+    });
+    endpoint_items.into_iter().chain(general_items).collect()
 }
 
 fn described(

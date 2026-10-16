@@ -20,7 +20,7 @@ Each rule ID is emitted by exactly one file in `src/rules/`.
 | --- | --- | --- |
 | MDS001, MDS005, MDS006 | `structure.rs` | document structure |
 | MDS002 | `path.rs` | endpoint path |
-| MDS003, MDS004, MDS007 | `sections.rs` | endpoint sections |
+| MDS003, MDS004, MDS007 | `sections.rs` | endpoint sections and the general Components section |
 | MDS008, MDS009 | `components.rs` | components |
 | MDS010 | `mappings.rs` | mapping tables |
 | MDS011 to MDS016 | `references.rs` | references and links |
@@ -32,7 +32,7 @@ Each rule ID is emitted by exactly one file in `src/rules/`.
 
 ## Where structure lives
 
-Which part or section a heading belongs to is decided by the outline, not by rules. Rules read `Outline` and report. Heading levels are named constants in `outline::level`. Do not write a bare heading level in a rule.
+Which part or section a heading belongs to is decided by the outline, not by rules. Rules read a `Source` (path, document, outline) and take structure only from the outline; `references.rs` and `component_scope.rs` also read document links and definitions. Rules report. Heading levels are named constants in `outline::level`. Do not write a bare heading level in a rule.
 
 ## Adding a rule
 

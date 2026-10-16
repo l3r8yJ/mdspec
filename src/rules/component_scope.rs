@@ -1,8 +1,3 @@
-use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::ops::Range;
-use std::path::{Path, PathBuf};
-
 use crate::config::Config;
 use crate::diagnostics::Diagnostic;
 use crate::links::{self, Destination, percent_decode};
@@ -10,6 +5,10 @@ use crate::model::{BlockKind, Document, LinkKind, Position};
 use crate::outline::{Item, Outline, Part, SectionKind};
 use crate::rule::Rule;
 use crate::rules::Source;
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::ops::Range;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Scope {

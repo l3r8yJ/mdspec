@@ -3,12 +3,12 @@ use crate::diagnostics::Diagnostic;
 use crate::model::BlockKind;
 use crate::outline::{Item, Section, SectionKind};
 use crate::rule::Rule;
-use crate::rules::{Source, section_diagnostics};
+use crate::rules::{Source, endpoint_section_diagnostics};
 use std::collections::HashSet;
 use std::path::Path;
 
 pub fn check(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
-    section_diagnostics(sources, SectionKind::Examples, |section, path| {
+    endpoint_section_diagnostics(sources, SectionKind::Examples, |section, path| {
         examples(section, path, &config.labels)
     })
 }

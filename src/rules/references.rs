@@ -1,7 +1,3 @@
-use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::path::{Path, PathBuf};
-
 use crate::config::Config;
 use crate::diagnostics::{Diagnostic, Severity};
 use crate::links::{self, Destination, percent_decode};
@@ -9,6 +5,9 @@ use crate::model::{Block, BlockKind, Document, Link, LinkKind, Position};
 use crate::parser;
 use crate::rule::Rule;
 use crate::rules::Source;
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 type TargetCache = HashMap<PathBuf, Result<HashSet<String>, String>>;
 
@@ -95,13 +94,12 @@ impl Validation<'_> {
     fn placement(&mut self) {
         let source = self.source;
         let sections = &source.outline.references;
-        let first_link = checked_links(self.source.document, self.config)
-            .find(|link| link.kind == LinkKind::Link);
-        if sections.is_empty()
-            && (first_link.is_some() || !self.source.document.definitions.is_empty())
+        let first_link =
+            checked_links(source.document, self.config).find(|link| link.kind == LinkKind::Link);
+        if sections.is_empty() && (first_link.is_some() || !source.document.definitions.is_empty())
         {
             let position = first_link.map(|link| link.position).or_else(|| {
-                self.source
+                source
                     .document
                     .definitions
                     .first()
@@ -119,12 +117,19 @@ impl Validation<'_> {
         if !self.config.references.definitions_at_end {
             return;
         }
-        for definition in &self.source.document.definitions {
+        for definition in &source.document.definitions {
             if !sections
                 .iter()
                 .any(|section| definition_is_terminal(section, definition.position.offset))
             {
-                self.error(Rule::Mds015, Some(definition.position), format!("Reference definitions must appear in the {} section at the end of the document", self.config.labels.references));
+                self.error(
+                    Rule::Mds015,
+                    Some(definition.position),
+                    format!(
+                        "Reference definitions must appear in the {} section at the end of the document",
+                        self.config.labels.references
+                    ),
+                );
             }
         }
         for block in sections

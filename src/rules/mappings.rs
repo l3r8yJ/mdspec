@@ -3,13 +3,13 @@ use crate::diagnostics::Diagnostic;
 use crate::model::{Block, BlockKind};
 use crate::outline::{Item, Section, SectionKind, level};
 use crate::rule::Rule;
-use crate::rules::{Source, section_diagnostics};
+use crate::rules::{Source, endpoint_section_diagnostics};
 use std::path::Path;
 
 const HEADER_AND_ONE_ROW: usize = 2;
 
 pub fn check(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
-    section_diagnostics(sources, SectionKind::Mappings, |section, path| {
+    endpoint_section_diagnostics(sources, SectionKind::Mappings, |section, path| {
         mapping(section, path, &config.labels)
     })
 }
@@ -49,7 +49,10 @@ fn item_diagnostics(item: &Item, path: &Path, labels: &Labels) -> Vec<Diagnostic
         .body
         .iter()
         .take_while(|block| !matches!(block.kind, BlockKind::Heading { .. }))
-        .filter(|block| matches!(block.kind, BlockKind::Table(_)))
+        .filter_map(|block| match &block.kind {
+            BlockKind::Table(rows) => Some((block, rows.as_slice())),
+            _ => None,
+        })
         .collect();
     if tables.is_empty() {
         return vec![error(
@@ -63,14 +66,16 @@ fn item_diagnostics(item: &Item, path: &Path, labels: &Labels) -> Vec<Diagnostic
     }
     tables
         .into_iter()
-        .filter_map(|table| table_diagnostic(table, path, labels))
+        .filter_map(|(block, rows)| table_diagnostic(block, rows, path, labels))
         .collect()
 }
 
-fn table_diagnostic(block: &Block, path: &Path, labels: &Labels) -> Option<Diagnostic> {
-    let BlockKind::Table(rows) = &block.kind else {
-        return None;
-    };
+fn table_diagnostic(
+    block: &Block,
+    rows: &[Vec<String>],
+    path: &Path,
+    labels: &Labels,
+) -> Option<Diagnostic> {
     let headers = rows.first().map(Vec::as_slice).unwrap_or_default();
     let source = headers.iter().position(|name| name.trim() == labels.source);
     let target = headers.iter().position(|name| name.trim() == labels.target);

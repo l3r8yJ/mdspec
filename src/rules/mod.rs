@@ -39,7 +39,7 @@ pub fn check(sources: &[Source], config: &Config) -> Vec<Diagnostic> {
         .collect()
 }
 
-fn section_diagnostics(
+fn endpoint_section_diagnostics(
     sources: &[Source],
     kind: SectionKind,
     check: impl Fn(&Section, &Path) -> Vec<Diagnostic>,
