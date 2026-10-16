@@ -131,7 +131,7 @@ pub fn children<'a>(following: impl IntoIterator<Item = &'a Block>, depth: u8) -
         .into_iter()
         .filter(|block| !is_title(block))
         .take_while(
-            |block| !matches!(block.kind, BlockKind::Heading { level, .. } if level <= depth),
+            |block| !matches!(block.kind, BlockKind::Heading { level: heading_level, .. } if heading_level <= depth),
         )
         .collect()
 }

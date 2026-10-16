@@ -54,7 +54,7 @@ fn described(
             .iter()
             .enumerate()
             .filter(|(_, child)| {
-                matches!(child.kind, BlockKind::Heading { level: depth, .. } if depth == description_level)
+                matches!(child.kind, BlockKind::Heading { level: heading_level, .. } if heading_level == description_level)
                     && child.text.trim() == labels.description
             })
             .collect();

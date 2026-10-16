@@ -278,3 +278,17 @@ fn accepts_a_mapping_table_after_a_late_title_as_directly_under_its_heading() {
     let workspace = Workspace::new();
     assert_that!(workspace.check_rules(document, "", true)).is_equal_to(vec![rule("MDS005", 13)]);
 }
+
+#[test]
+fn counts_logic_text_after_a_late_title() {
+    let document = "## Эндпоинт: А\n\nPath: `GET /a`\n\n### Логика работы\n\n# Поздний\n\nТекст.\n";
+    let workspace = Workspace::new();
+    assert_that!(workspace.check_rules(document, "", true)).is_equal_to(vec![rule("MDS005", 7)]);
+}
+
+#[test]
+fn counts_an_example_code_block_after_a_late_title() {
+    let document = "## Эндпоинт: А\n\nPath: `GET /a`\n\n### Логика работы\n\nТекст.\n\n### Примеры\n\n#### Запрос\n\n# Поздний\n\n```json\n{}\n```\n";
+    let workspace = Workspace::new();
+    assert_that!(workspace.check_rules(document, "", true)).is_equal_to(vec![rule("MDS005", 13)]);
+}
