@@ -2,6 +2,7 @@ mod cli;
 mod components;
 mod config;
 mod diagnostics;
+mod links;
 mod model;
 mod outline;
 mod parser;

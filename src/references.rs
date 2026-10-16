@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::config::Config;
 use crate::diagnostics::{Diagnostic, Severity};
+use crate::links::{self, Destination, percent_decode};
 use crate::model::{Block, BlockKind, Document, Link, LinkKind, Position};
 use crate::outline::Outline;
 use crate::parser;
@@ -57,7 +58,7 @@ impl Validation<'_> {
                 (None, Some(url)) => {
                     if link.kind == LinkKind::Link
                         && self.config.references.require_reference_style
-                        && is_local(url)
+                        && links::is_local(url)
                     {
                         self.error(
                             Rule::Mds014,
@@ -143,50 +144,37 @@ impl Validation<'_> {
     }
 
     fn target(&mut self, url: &str, position: Position) {
-        if !is_local(url)
-            || (!self.config.references.validate_local_paths
-                && !self.config.references.validate_anchors)
+        if !self.config.references.validate_local_paths && !self.config.references.validate_anchors
         {
             return;
         }
-        let (resource, fragment) = url
-            .split_once('#')
-            .map_or((url, None), |(resource, fragment)| {
-                (resource, Some(fragment))
-            });
-        let raw_path = resource
-            .split_once('?')
-            .map_or(resource, |(resource, _)| resource);
-        let Some(decoded_path) = percent_decode(raw_path) else {
-            self.error(
+        match links::resolve(url, self.path) {
+            Destination::External => {}
+            Destination::InvalidPath => self.error(
                 Rule::Mds012,
                 Some(position),
                 "Invalid percent encoding in local path",
-            );
-            return;
-        };
-        let same_file = decoded_path.is_empty();
-        let target = if same_file {
-            self.path.to_path_buf()
-        } else {
-            self.path
-                .parent()
-                .unwrap_or_else(|| Path::new("."))
-                .join(&decoded_path)
-        };
-        if self.config.references.validate_local_paths
-            && !same_file
-            && let Err(error) = check_file(&target)
-        {
-            self.error(Rule::Mds012, Some(position), error);
-            return;
-        }
-        if same_file
-            || target
-                .extension()
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("md"))
-        {
-            self.fragment(&target, fragment, position);
+            ),
+            Destination::Local {
+                file,
+                same_file,
+                fragment,
+            } => {
+                if self.config.references.validate_local_paths
+                    && !same_file
+                    && let Err(error) = check_file(&file)
+                {
+                    self.error(Rule::Mds012, Some(position), error);
+                    return;
+                }
+                if same_file
+                    || file
+                        .extension()
+                        .is_some_and(|extension| extension.eq_ignore_ascii_case("md"))
+                {
+                    self.fragment(&file, fragment, position);
+                }
+            }
         }
     }
 
@@ -247,38 +235,6 @@ fn check_file(target: &Path) -> Result<(), String> {
     fs::File::open(target)
         .map_err(|error| format!("Unable to open {}: {error}", target.display()))?;
     Ok(())
-}
-
-pub fn is_local(url: &str) -> bool {
-    if url.starts_with("//") {
-        return false;
-    }
-    let Some((scheme, _)) = url.split_once(':') else {
-        return true;
-    };
-    !(scheme.starts_with(|character: char| character.is_ascii_alphabetic())
-        && scheme.chars().all(|character| {
-            character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.')
-        }))
-}
-
-const HEX_RADIX: u32 = 16;
-
-pub fn percent_decode(value: &str) -> Option<String> {
-    let mut decoded = Vec::with_capacity(value.len());
-    let mut bytes = value.bytes();
-    while let Some(byte) = bytes.next() {
-        if byte == b'%' {
-            let high = char::from(bytes.next()?).to_digit(HEX_RADIX)?;
-            let low = char::from(bytes.next()?).to_digit(HEX_RADIX)?;
-            decoded.push(u8::try_from(high * HEX_RADIX + low).ok()?);
-        } else {
-            decoded.push(byte);
-        }
-    }
-    String::from_utf8(decoded)
-        .ok()
-        .filter(|value| !value.contains('\0'))
 }
 
 fn anchors(document: &Document) -> HashSet<String> {
