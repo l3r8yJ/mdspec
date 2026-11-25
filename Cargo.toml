@@ -33,7 +33,7 @@ ignore = "0.4"
 globset = "0.4"
 
 [dev-dependencies]
-asserting = { version = "0.17", default-features = false, features = ["std"] }
+asserting = { version = "0.18", default-features = false, features = ["std"] }
 tempfile = "3"
 
 [profile.release]
